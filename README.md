@@ -88,7 +88,7 @@ session_merge_build({
 
 ## 已知坑
 
-写合并逻辑时踩过的，都在 `docs/runbook.md`：时间倒退、重复 turn、压缩超限、`already owned by an active write handle`、8 种打不开的报错。
+写合并逻辑时踩过的，都在 [`session-merge-runbook.md`](./session-merge-runbook.md)：时间倒退、重复 turn、压缩超限、`already owned by an active write handle`、8 种打不开的报错。
 
 ## License
 
