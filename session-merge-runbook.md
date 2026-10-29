@@ -43,7 +43,7 @@ session_merge_build {
 
 ```
 session_merge_build {
-  fromJsonl: "E:/DSH-Workspace/_xxx.jsonl",
+  fromJsonl: "<你的工作目录>/_mix.jsonl",
   jsonlFrom: <起点>, jsonlUntil: <终点>,
   targetId: "session-merged-X",
   sources: ["session-merged-X"]
@@ -93,6 +93,6 @@ session_merge_build {
 - **插件没有可靠热载**：改 `index.js`、改 `cordis.patch.yml` 都不触发 `apply`；日志里那些 `apply` 全是重启时发生的。改插件只能重启验证。
 - **绝对不要用 PowerShell 读写这个插件文件**：`Get-Content -Raw` 用 GBK 解码 UTF-8，整份中文会坏，写回去不可逆。`Set-Content`、`-replace` 批量改同理危险。
   - 正确做法：`edit`/`write` 工具（UTF-8 安全），或 node 脚本 `fs.readFileSync(f,'utf8')`。
-  - 写坏了：从 `E:\DSH-Workspace\_session-backup\` 找备份，没有就重写。
+  - 写坏了：从自己的备份目录找回上一版，没有就按本文档重写。
 - 损坏特征：`node --check` 报 `Invalid regular expression` / `Invalid or unexpected token`；`read` 工具报 `invalid UTF-8 text`。看到就别再用 PowerShell 修。
 
