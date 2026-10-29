@@ -1260,7 +1260,38 @@ export function apply(ctx) {
         return { ok: false, error: '写盘失败: ' + (err?.message ?? err) };
       }
       try { await handle.close(); } catch { /* 忽略 */ }
-      return { ok: true, mode, targetId: args.targetId, events: out.length, turns: newTurn - startTurn, stats };
+      // 进度：告诉调用方下一段从哪开始、还剩多少、该不该先压缩
+      const totalTurns = stats.reduce((s, x) => s + (x.turns || 0), 0)
+      const takenTurns = stats.reduce((s, x) => s + (x.taken || 0), 0)
+      const nextSkip = (Number(args.skip) || 0) + takenTurns
+      const remaining = Math.max(0, totalTurns - nextSkip)
+      // 估算本次写进去的 surface 字节：assistant/user 文本 + tool/result 文本
+      let surfBytes = 0
+      for (const e of out) {
+        if (e.type !== 'user/message' && e.type !== 'assistant/message' && e.type !== 'tool/result') continue
+        const c = e.type === 'assistant/message' ? e.data?.message?.content : e.type === 'tool/result' ? e.data?.message?.content : e.data?.content
+        if (!Array.isArray(c)) continue
+        for (const b of c) if (b && typeof b.text === 'string') surfBytes += Buffer.byteLength(b.text, 'utf8')
+      }
+      const surfMB = Number((surfBytes / 1048576).toFixed(2))
+      const approxTokens = Math.round(surfBytes / 3.8)
+      return {
+        ok: true, mode, targetId: args.targetId,
+        events: out.length, turns: newTurn - startTurn, stats,
+        progress: {
+          written: takenTurns,
+          total: totalTurns,
+          nextSkip,
+          remaining,
+          nextArgs: remaining > 0 ? { skip: nextSkip, limit: Number(args.limit) || 120 } : null,
+        },
+        surface: { mb: surfMB, approxTokens, shouldCompact: surfMB >= 2.4 },
+        hint: remaining > 0
+          ? (surfMB >= 2.4
+            ? '本次写入 ' + surfMB + 'MB（约 ' + approxTokens + ' tokens），已到该压缩的线：先在 GUI 里 /compact，再按 nextArgs 继续。'
+            : '还有 ' + remaining + ' 个 turn 未写。可直接按 nextArgs 继续，也可以先压缩。')
+          : '全部写完了，最后压一次收尾。',
+      };
     },
   }), 'dsh-session-merge: merge tool');
 
