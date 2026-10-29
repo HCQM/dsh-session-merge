@@ -60,6 +60,37 @@ function decompressAllFrames(buf) {
   return parts.length ? Buffer.concat(parts) : null;
 }
 
+/** 读一个会话的 header（只为拿 cwd，不解析事件）。 */
+function readSessionHeader(sessionId) {
+  let dirs = [];
+  try { dirs = fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true }).filter((d) => d.isDirectory()); } catch { return null; }
+  for (const d of dirs) {
+    const full = path.join(SESSIONS_ROOT, d.name, sessionId);
+    if (!fs.existsSync(full)) continue;
+    let files = [];
+    try { files = fs.readdirSync(full).filter((f) => /^session\.v\d+\.jsonl(\.zstd)?$/.test(f)); } catch { continue; }
+    if (!files.length) continue;
+    files.sort((a, b) => (Number((b.match(/v(\d+)/) || [])[1] || 0)) - (Number((a.match(/v(\d+)/) || [])[1] || 0)));
+    const file = path.join(full, files[0]);
+    try {
+      const buf = fs.readFileSync(file);
+      const out = file.endsWith('.zstd') ? decompressAllFrames(buf) : buf;
+      if (!out) return null;
+      const firstLine = out.toString('utf8').split('\n').find((l) => l.trim());
+      if (!firstLine) return null;
+      const h = JSON.parse(firstLine);
+      return typeof h === 'object' && h ? h : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
+/** 合并时默认跟着源会话的工作区，避免落到 DSH 的启动目录。 */
+function firstSourceCwd(sourceId) {
+  const h = readSessionHeader(sourceId);
+  return h && typeof h.cwd === 'string' && h.cwd ? h.cwd : null;
+}
+
 function readSessionEvents(sessionId, includeShadowed = false) {
   let dirs = [];
   try { dirs = fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true }).filter((d) => d.isDirectory()); } catch { return null; }
@@ -192,7 +223,7 @@ export function apply(ctx) {
       properties: {
         sources: { type: 'array', items: { type: 'string' } },
         targetId: { type: 'string' },
-        cwd: { type: 'string', description: '会话落在哪个工作区目录，默认 E:\\DSH-Workspace' },
+        cwd: { type: 'string', description: '会话落在哪个工作区目录；省略则继承源会话的 cwd' },
         limit: { type: 'number' },
         skip: { type: 'number' },
         fromStart: { type: 'boolean' },
@@ -248,7 +279,9 @@ export function apply(ctx) {
         version: 4,
         createdAt: now,
         // cwd 决定会话落在哪个工作区目录，不能用 process.cwd()（那是 DSH 的启动目录）
-        cwd: typeof args.cwd === 'string' && args.cwd ? args.cwd : 'E:\\DSH-Workspace',
+        cwd: typeof args.cwd === 'string' && args.cwd
+          ? args.cwd
+          : (firstSourceCwd(sources[0]) || process.cwd()),
         isSeeded: false,
         delegationDepth: 0,
         agentPreset: 'standard',
