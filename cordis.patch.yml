@@ -1,0 +1,5 @@
+# Bundle patch layer: 挂一个只读探测工具，用来验证插件能不能碰 ctx.sessions。
+# 没有任何 systemPrompt overlay，也不改现有工具集。
+- insert:
+    - id: dsh-session-merge
+      name: dsh-session-merge
