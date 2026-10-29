@@ -1,7 +1,7 @@
 // 按 packages/session/session-format-v3-to-v4/src/relationships.ts 的规则实现的完整校验器
 // 用于写盘前自检，覆盖 turn/step/tool/surface/developer/title/command/compaction
 
-export function validateEventsFull(events, startTurn = 1) {
+export function validateEventsFull(events, startTurn = 1, opts = {}) {
   const problems = []
   let turn = null
   let nextTurn = startTurn
@@ -34,7 +34,8 @@ export function validateEventsFull(events, startTurn = 1) {
     }
     // user/assistant 消息必须带 producer-owned source
     if ((e.type === 'user/message' || e.type === 'assistant/message' || e.type === 'system/message' || e.type === 'developer/message')) {
-      const src = e.type === 'assistant/message' ? (d.message && d.message.source) : d.source
+      // 真实数据里 source 一律在 message 上（含 system/message），data 顶层没有
+      const src = (d.message && d.message.source) || d.source
       if (!src || typeof src !== 'object' || typeof src.kind !== 'string') {
         fail(`${e.type} 缺 producer-owned source（seq ${e.seq}）`)
       }
@@ -49,8 +50,9 @@ export function validateEventsFull(events, startTurn = 1) {
       const cid = d.message && d.message.source && d.message.source.callId
       if (!cid) fail(`tool/result 缺 message.source.callId（seq ${e.seq}）`)
     }
-    // session/end-seed 只能有一条，且不能是 inherited（外部生成的会话 header 是 unseeded）
-    if (e.type === 'session/end-seed' && d.inherited === true) {
+    // session/end-seed 带 inherited 只有 seeded 会话（fork 出来的）才允许；
+    // 不知道 header 时按 opts.isSeeded 判，默认 false（外部构造的场景）
+    if (e.type === 'session/end-seed' && d.inherited === true && opts.isSeeded !== true) {
       fail(`session/end-seed 带 inherited: true（unseeded 会话不允许，seq ${e.seq}）`)
     }
 

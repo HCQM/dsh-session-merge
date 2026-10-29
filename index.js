@@ -192,6 +192,7 @@ export function apply(ctx) {
       properties: {
         sources: { type: 'array', items: { type: 'string' } },
         targetId: { type: 'string' },
+        cwd: { type: 'string', description: '会话落在哪个工作区目录，默认 E:\\DSH-Workspace' },
         limit: { type: 'number' },
         skip: { type: 'number' },
         fromStart: { type: 'boolean' },
@@ -231,8 +232,9 @@ export function apply(ctx) {
     },
     async execute(args = {}) {
       const now = Date.now();
-      if (!args.targetId) args.targetId = 'session-' + randomUUID();
-      log('execute targetId=' + args.targetId + ' copySequential=' + args.copySequential + ' seqFrom=' + args.seqFrom + ' seqUntil=' + args.seqUntil);
+      // args 在 DSH 里是冻结的，不能原地改；统一用局部变量
+      const targetId = args.targetId || ('session-' + randomUUID());
+      log('execute targetId=' + targetId + ' copySequential=' + args.copySequential + ' seqFrom=' + args.seqFrom + ' seqUntil=' + args.seqUntil);
 
       const persistence = ctx.get('sessionPersistence');
       if (!persistence || typeof persistence.create !== 'function') {
@@ -242,10 +244,11 @@ export function apply(ctx) {
       if (!sources.length && args.inspect !== true && !args.fromJsonl) return { ok: false, error: 'sources 为空' };
 
       const header = {
-        id: args.targetId,
+        id: targetId,
         version: 4,
         createdAt: now,
-        cwd: typeof args.cwd === 'string' && args.cwd ? args.cwd : process.cwd(),
+        // cwd 决定会话落在哪个工作区目录，不能用 process.cwd()（那是 DSH 的启动目录）
+        cwd: typeof args.cwd === 'string' && args.cwd ? args.cwd : 'E:\\DSH-Workspace',
         isSeeded: false,
         delegationDepth: 0,
         agentPreset: 'standard',
@@ -257,10 +260,10 @@ export function apply(ctx) {
         if (!agents || typeof agents.resume !== 'function') return { ok: false, error: '拿不到 agents' };
         let h = null;
         try {
-          log('resumeOnly：' + args.targetId);
-          h = await agents.resume({ resumeSessionId: args.targetId });
+          log('resumeOnly：' + targetId);
+          h = await agents.resume({ resumeSessionId: targetId });
           log('resume ok');
-          return { ok: true, mode: 'resumeOnly', targetId: args.targetId };
+          return { ok: true, mode: 'resumeOnly', targetId: targetId };
         } catch (err) {
           log('resumeOnly 失败: ' + (err?.name ?? '') + ' ' + (err?.message ?? err));
           return { ok: false, error: (err?.name ?? '') + ': ' + (err?.message ?? err) };
@@ -304,9 +307,9 @@ export function apply(ctx) {
         let startSeq = 0;
         let startTurn = 0;
         const seenMsgs = new Set();
-        const stat0 = await persistence.stat(args.targetId).catch(() => null);
+        const stat0 = await persistence.stat(targetId).catch(() => null);
         if (stat0) {
-          h0 = await persistence.open(args.targetId, 'write');
+          h0 = await persistence.open(targetId, 'write');
           try {
             const all = await h0.read(0);
             const evs = all?.events || [];
@@ -429,7 +432,7 @@ export function apply(ctx) {
             }
 
             const data = { ...(ev.data || {}) };
-            if (typeof data.owner === 'string' && data.owner === sid) data.owner = args.targetId;
+            if (typeof data.owner === 'string' && data.owner === sid) data.owner = targetId;
             if (typeof data.turn === 'number') {
               if (ev.type === 'turn/start') {
                 newTurn += 1;
@@ -516,7 +519,7 @@ export function apply(ctx) {
             '，丢工具 ' + orphanCalls + '，跳过 ' + JSON.stringify(skipped));
         if (args.dryRun === true) return { ok: true, dryRun: true, mode: 'fullCopy', events: out.length, turns: newTurn - startTurn, stats };
 
-        const probs = validateEventsFull(out, startTurn + 1);
+        const probs = validateEventsFull(out, startTurn + 1, { isSeeded: true });
         if (probs.length) {
           log('fullCopy 预检失败 ' + probs.length + ': ' + probs.slice(0, 3).join(' | '));
           if (h0) { try { await h0.close(); } catch { /* 忽略 */ } }
@@ -566,9 +569,9 @@ export function apply(ctx) {
         let baseSeq = 0;
         let baseTurn = 0;
         const seen = new Set();
-        const st6 = await persistence.stat(args.targetId).catch(() => null);
+        const st6 = await persistence.stat(targetId).catch(() => null);
         if (st6) {
-          h6 = await persistence.open(args.targetId, 'write');
+          h6 = await persistence.open(targetId, 'write');
           try {
             const all = await h6.read(0);
             const evs = all?.events || [];
@@ -678,7 +681,7 @@ export function apply(ctx) {
             '，字节 ' + (accBytes / 1048576).toFixed(2) + 'MB' + (nextFrom ? '，下一批起点 ' + nextFrom : '，已到末尾'));
 
         if (args.dryRun === true) return { ok: true, dryRun: true, mode: 'mixCopy', events: out2.length, turns: t2 - baseTurn, nextFrom };
-        const probs2 = validateEventsFull(out2, baseTurn + 1);
+        const probs2 = validateEventsFull(out2, baseTurn + 1, { isSeeded: true });
         if (probs2.length) {
           log('mix 预检失败 ' + probs2.length + ': ' + probs2.slice(0, 3).join(' | '));
           if (h6) { try { await h6.close(); } catch { /* 忽略 */ } }
@@ -701,12 +704,12 @@ export function apply(ctx) {
 
       // ============ 模式：折叠既有会话的早期 surface ============
       if (args.foldTarget === true) {
-        log('foldTarget：' + args.targetId);
-        const st8 = await persistence.stat(args.targetId).catch(() => null);
+        log('foldTarget：' + targetId);
+        const st8 = await persistence.stat(targetId).catch(() => null);
         if (!st8) return { ok: false, error: '目标不存在' };
         let h8 = null;
         try {
-          h8 = await persistence.open(args.targetId, 'write');
+          h8 = await persistence.open(targetId, 'write');
           const all = await h8.read(0);
           const evs = all?.events || [];
           const budget = Number(args.foldBudgetBytes) || 2700000;
@@ -768,7 +771,7 @@ export function apply(ctx) {
 
       // ============ 模式 -6：查看会话结构（只读）============
       if (args.inspect === true) {
-        const id = args.targetId || sources[0];
+        const id = targetId || sources[0];
         if (!id) return { ok: false, error: '需要 targetId 或 sources[0]' };
         const evs = readSessionEvents(id, true);
         if (!evs || !evs.length) return { ok: false, error: '读不到会话 ' + id };
@@ -835,13 +838,13 @@ export function apply(ctx) {
         for (const e of batch) if (SURF2.has(e.type)) surfBytes2 += JSON.stringify(e.data || {}).length;
         const turnCount = batch.filter((e) => e.type === 'turn/end').length;
         if (args.dryRun === true) {
-          const st5 = await persistence.stat(args.targetId).catch(() => null);
+          const st5 = await persistence.stat(targetId).catch(() => null);
           log('[jsonl dryRun] 事件 ' + batch.length + ' | turn ' + turnCount + ' | surface ' + (surfBytes2 / 1048576).toFixed(2) + 'MB');
           return { ok: true, dryRun: true, events: batch.length, turns: turnCount, surfaceMB: Number((surfBytes2 / 1048576).toFixed(2)), targetExists: !!st5 };
         }
         let h5 = null;
         try {
-          h5 = await persistence.open(args.targetId, 'write');
+          h5 = await persistence.open(targetId, 'write');
           const cur = await h5.read(0);
           const evs = cur?.events || [];
           const nextSeq = evs.length ? Math.max(...evs.map((e) => (typeof e.seq === 'number' ? e.seq : -1))) + 1 : 0;
@@ -853,7 +856,7 @@ export function apply(ctx) {
             for (const e of batch) if (typeof e.seq === 'number') e.seq += delta;
           }
           const firstTurn = Math.min(...batch.map((e) => (typeof e.data?.turn === 'number' ? e.data.turn : Infinity)));
-          const probs5 = validateEventsFull(batch, Number.isFinite(firstTurn) ? firstTurn : maxTurn + 1);
+          const probs5 = validateEventsFull(batch, Number.isFinite(firstTurn) ? firstTurn : maxTurn + 1, { isSeeded: true });
           if (probs5.length) {
             log('jsonl 预检失败 ' + probs5.length + ': ' + probs5.slice(0, 3).join(' | '));
             return { ok: false, stage: 'precheck', problems: probs5.slice(0, 20), total: probs5.length };
@@ -885,7 +888,7 @@ export function apply(ctx) {
           const srcSession = resumed.agent ? resumed.agent.session : null;
           if (!srcSession) return { ok: false, error: 'resume 没给出 session' };
 
-          const child = sessions.fork(srcSession, typeof args.forkBoundary === 'number' ? args.forkBoundary : undefined, args.targetId);
+          const child = sessions.fork(srcSession, typeof args.forkBoundary === 'number' ? args.forkBoundary : undefined, targetId);
           log('fork 返回: ' + (child ? child.id : 'null'));
 
           // 落盘：fork 出来的只是内存 Session，必须自己建 handle 再 append seed
@@ -905,7 +908,7 @@ export function apply(ctx) {
             await handle.close();
             log('seed 落盘完成');
           }
-          return { ok: true, mode: 'forkClone', targetId: args.targetId, forked: child ? child.id : null, seq: child ? child.seq : null };
+          return { ok: true, mode: 'forkClone', targetId: targetId, forked: child ? child.id : null, seq: child ? child.seq : null };
         } catch (err) {
           log('forkClone 失败: ' + (err?.name ?? '') + ' ' + (err?.message ?? err));
           return { ok: false, error: (err?.name ?? '') + ': ' + (err?.message ?? err) };
@@ -939,10 +942,10 @@ export function apply(ctx) {
 
         let startSeq = 0;
         let startTurn = 0;
-        const stat0 = await persistence.stat(args.targetId).catch(() => null);
+        const stat0 = await persistence.stat(targetId).catch(() => null);
         let handle0 = null;
         if (stat0) {
-          handle0 = await persistence.open(args.targetId, 'write');
+          handle0 = await persistence.open(targetId, 'write');
           try {
             const all = await handle0.read(0);
             const evs = all?.events || [];
@@ -986,7 +989,7 @@ export function apply(ctx) {
           }
 
           const data = { ...(ev.data || {}) };
-          if (typeof data.owner === 'string' && data.owner === sources[0]) data.owner = args.targetId;
+          if (typeof data.owner === 'string' && data.owner === sources[0]) data.owner = targetId;
 
           if (typeof data.turn === 'number') {
             if (ev.type === 'turn/start') {
@@ -1040,7 +1043,7 @@ export function apply(ctx) {
 
         if (args.dryRun) return { ok: true, dryRun: true, mode: 'copySequential', events: out.length, turns: newTurn, compactions: compactionCount };
 
-        const problems2 = validateEventsFull(out, startTurn + 1);
+        const problems2 = validateEventsFull(out, startTurn + 1, { isSeeded: true });
         if (problems2.length) {
           log('预检失败 ' + problems2.length + ' 条: ' + problems2.slice(0, 5).join(' | '));
           if (handle0) { try { await handle0.close(); } catch { /* 忽略 */ } }
@@ -1068,7 +1071,7 @@ export function apply(ctx) {
           return { ok: false, error: '写盘失败: ' + (err?.message ?? err) };
         }
         try { await handle2.close(); } catch { /* 忽略 */ }
-        return { ok: true, mode: 'copySequential', targetId: args.targetId, events: out.length, turns: newTurn, compactions: compactionCount };
+        return { ok: true, mode: 'copySequential', targetId: targetId, events: out.length, turns: newTurn, compactions: compactionCount };
       }
 
       // ============ 模式二：多源按 turn 块合并（deprecated，用 fullCopy 代替）============
@@ -1125,10 +1128,10 @@ export function apply(ctx) {
       let startSeq = 0;
       let startTurn = 0;
       let mode = 'create';
-      const stat = await persistence.stat(args.targetId).catch(() => null);
+      const stat = await persistence.stat(targetId).catch(() => null);
       if (stat) {
         mode = 'append';
-        handle = await persistence.open(args.targetId, 'write');
+        handle = await persistence.open(targetId, 'write');
         try {
           const all = await handle.read(0);
           const evs = all?.events || [];
@@ -1242,7 +1245,7 @@ export function apply(ctx) {
 
       out.push({ seq: seq++, time: (out.length ? out[out.length - 1].time : now) + 1, type: 'session/title', data: { title: '合并会话', messageSeqs: [], source: { kind: 'user' } } });
 
-      const problems = validateEventsFull(out, startTurn + 1);
+      const problems = validateEventsFull(out, startTurn + 1, { isSeeded: true });
       if (problems.length) {
         log('预检失败 ' + problems.length + ' 条: ' + problems.slice(0, 5).join(' | '));
         try { await handle.close(); } catch { /* 忽略 */ }
@@ -1275,8 +1278,9 @@ export function apply(ctx) {
       }
       const surfMB = Number((surfBytes / 1048576).toFixed(2))
       const approxTokens = Math.round(surfBytes / 3.8)
+      log('[progress] 本段 ' + takenTurns + '/' + totalTurns + '，下一段 skip=' + nextSkip + '，剩 ' + remaining + '，surface ' + surfMB + 'MB ≈ ' + approxTokens + ' tokens，shouldCompact=' + (surfMB >= 2.4));
       return {
-        ok: true, mode, targetId: args.targetId,
+        ok: true, mode, targetId: targetId,
         events: out.length, turns: newTurn - startTurn, stats,
         progress: {
           written: takenTurns,
@@ -1310,8 +1314,8 @@ export function apply(ctx) {
       render: (value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
     },
     async execute(args = {}) {
-      log('unlock 调用 targetId=' + args.targetId + ' action=' + args.action);
-      const out = { targetId: args.targetId };
+      log('unlock 调用 targetId=' + targetId + ' action=' + args.action);
+      const out = { targetId: targetId };
       const persistence = ctx.get('sessionPersistence');
       if (!persistence) return { error: '拿不到 sessionPersistence' };
       try {
@@ -1323,13 +1327,13 @@ export function apply(ctx) {
       if (args.action === 'release') {
         for (const m of ['close', 'release', 'evict', 'dispose', 'unlock', 'closeSession', 'releaseSession', 'forceRelease']) {
           if (typeof persistence[m] === 'function') {
-            try { out['ok_' + m] = String(await persistence[m](args.targetId)); }
+            try { out['ok_' + m] = String(await persistence[m](targetId)); }
             catch (err) { out['err_' + m] = String(err?.message ?? err); }
           }
         }
       }
       try {
-        const st = await persistence.stat(args.targetId);
+        const st = await persistence.stat(targetId);
         let s = JSON.stringify(st);
         out.statPreview = s.length > 1200 ? s.slice(0, 1200) + '…' : s;
       } catch (err) { out.statErr = String(err?.message ?? err); }
