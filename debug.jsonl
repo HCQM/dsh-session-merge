@@ -165,3 +165,67 @@
 {"t":"2026-10-30T17:29:17.830Z","msg":"execute targetId=test-fork-01 keys=[\"resumeOnly\",\"targetId\"]"}
 {"t":"2026-10-30T17:29:17.831Z","msg":"resumeOnly：test-fork-01"}
 {"t":"2026-10-30T17:29:18.931Z","msg":"resumeOnly 失败: Error session \"test-fork-01\" already exists"}
+{"t":"2026-10-30T17:32:21.256Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T17:32:21.259Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T17:32:33.401Z","msg":"execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 keys=[\"verify\",\"targetId\"]"}
+{"t":"2026-10-30T17:32:34.584Z","msg":"[verify] session-14afce5f-7138-4b85-91f5-90224a0d5401 打开成功，事件 49513"}
+{"t":"2026-10-30T17:32:44.237Z","msg":"execute targetId=test-mkroot-03 keys=[\"makeRoot\",\"sourceId\",\"targetId\"]"}
+{"t":"2026-10-30T17:32:45.120Z","msg":"[reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514"}
+{"t":"2026-10-30T17:32:45.122Z","msg":"[makeRoot] 源事件 49514，找 header"}
+{"t":"2026-10-30T17:32:45.122Z","msg":"[makeRoot] header keys=[]"}
+{"t":"2026-10-30T17:32:45.127Z","msg":"[makeRoot] create test-mkroot-03"}
+{"t":"2026-10-30T17:32:45.129Z","msg":"[makeRoot] create 失败: session metadata createdAt must be a non-negative safe integer"}
+{"t":"2026-10-30T17:34:04.789Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T17:34:04.794Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T17:34:15.901Z","msg":"execute targetId=test-mkroot-04 keys=[\"makeRoot\",\"sourceId\",\"targetId\"]"}
+{"t":"2026-10-30T17:34:16.815Z","msg":"[reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514"}
+{"t":"2026-10-30T17:34:16.816Z","msg":"[makeRoot] 源事件 49514，找 header"}
+{"t":"2026-10-30T17:34:16.817Z","msg":"[makeRoot] header keys=[\"type\",\"version\",\"id\",\"createdAt\",\"cwd\",\"isSeeded\",\"delegationDepth\",\"agentPreset\"]"}
+{"t":"2026-10-30T17:34:16.822Z","msg":"[makeRoot] create test-mkroot-04"}
+{"t":"2026-10-30T17:34:16.824Z","msg":"[makeRoot] create 失败: format v4 header has unexpected field type"}
+{"t":"2026-10-30T17:35:12.073Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T17:35:12.076Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T17:35:23.853Z","msg":"execute targetId=test-mkroot-05 keys=[\"makeRoot\",\"sourceId\",\"targetId\"]"}
+{"t":"2026-10-30T17:35:24.770Z","msg":"[reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514"}
+{"t":"2026-10-30T17:35:24.772Z","msg":"[makeRoot] 源事件 49514，找 header"}
+{"t":"2026-10-30T17:35:24.772Z","msg":"[makeRoot] header keys=[\"type\",\"version\",\"id\",\"createdAt\",\"cwd\",\"isSeeded\",\"delegationDepth\",\"agentPreset\"]"}
+{"t":"2026-10-30T17:35:24.778Z","msg":"[makeRoot] create test-mkroot-05"}
+{"t":"2026-10-30T17:35:24.897Z","msg":"[makeRoot] create ok"}
+{"t":"2026-10-30T17:35:25.773Z","msg":"[makeRoot] 生成 49513 条 | 校验问题 0 / header 问题 0"}
+{"t":"2026-10-30T17:35:29.518Z","msg":"[makeRoot] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> test-mkroot-05 | 事件 49513 | 解继承 0 | 修 delivery 18"}
+{"t":"2026-10-30T17:35:52.944Z","msg":"unlock 调用 targetId=test-mkroot-05 action=diagnose"}
+{"t":"2026-10-30T17:36:02.340Z","msg":"execute targetId=test-seq-02 keys=[\"copySequential\",\"sources\",\"targetId\"]"}
+{"t":"2026-10-30T17:36:02.720Z","msg":"copySequential：单源直线复制"}
+{"t":"2026-10-30T17:36:03.648Z","msg":"[reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514"}
+{"t":"2026-10-30T17:36:03.881Z","msg":"copySequential 完成：49496 条事件，1310 turn，44 压缩记录"}
+{"t":"2026-10-30T17:36:03.912Z","msg":"预检通过"}
+{"t":"2026-10-30T17:36:03.926Z","msg":"create 模式"}
+{"t":"2026-10-30T17:36:07.248Z","msg":"append+flush ok"}
+{"t":"2026-10-30T17:36:36.682Z","msg":"execute targetId=test-seq-02 keys=[\"dryRun\",\"fromJsonl\",\"jsonlFrom\",\"jsonlUntil\",\"targetId\"]"}
+{"t":"2026-10-30T17:36:36.683Z","msg":"fromJsonl：E:/DSH-Workspace/_title.jsonl"}
+{"t":"2026-10-30T17:36:36.684Z","msg":"[jsonl] 切点补齐到 turn 边界，实际取到 1"}
+{"t":"2026-10-30T17:36:36.692Z","msg":"[jsonl dryRun] 事件 1 | turn 0 | surface 0.00MB"}
+{"t":"2026-10-30T17:36:45.569Z","msg":"execute targetId=test-seq-02 keys=[\"fromJsonl\",\"jsonlFrom\",\"jsonlUntil\",\"targetId\"]"}
+{"t":"2026-10-30T17:36:45.570Z","msg":"fromJsonl：E:/DSH-Workspace/_title.jsonl"}
+{"t":"2026-10-30T17:36:45.571Z","msg":"[jsonl] 切点补齐到 turn 边界，实际取到 1"}
+{"t":"2026-10-30T17:36:46.509Z","msg":"jsonl 写盘失败: session \"test-seq-02\": stored log is corrupt: SessionFormatError: command sourceEventSeq must name an earlier event (raw log: C:\\Users\\cloud\\.dsh\\sessions\\--E-DSH-Workspace-~6D4B~8BD5--\\test-seq-02\\session.v4.jsonl.zstd)"}
+{"t":"2026-10-30T17:36:57.365Z","msg":"execute targetId=test-seq-02 keys=[\"verify\",\"targetId\"]"}
+{"t":"2026-10-30T17:36:58.320Z","msg":"[verify] test-seq-02 打不开：SessionPersistenceCorruptionError session \"test-seq-02\": stored log is corrupt: SessionFormatError: command sourceEventSeq must name an earlier event (raw log: C:\\Users\\cloud\\.dsh\\sessions\\--E-DSH-Workspace-~6D4B~8BD5--\\test-seq-02\\session.v4.jsonl.zstd)"}
+{"t":"2026-10-30T17:37:52.895Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T17:37:52.898Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T17:38:13.530Z","msg":"execute targetId=test-seq-03 keys=[\"copySequential\",\"sources\",\"targetId\"]"}
+{"t":"2026-10-30T17:38:13.912Z","msg":"copySequential：单源直线复制"}
+{"t":"2026-10-30T17:38:14.824Z","msg":"[reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514"}
+{"t":"2026-10-30T17:38:14.974Z","msg":"copySequential 完成：49496 条事件，1310 turn，44 压缩记录"}
+{"t":"2026-10-30T17:38:15.024Z","msg":"预检通过"}
+{"t":"2026-10-30T17:38:15.033Z","msg":"create 模式"}
+{"t":"2026-10-30T17:38:18.657Z","msg":"append+flush ok"}
+{"t":"2026-10-30T17:38:43.026Z","msg":"execute targetId=test-seq-03 keys=[\"verify\",\"targetId\"]"}
+{"t":"2026-10-30T17:38:44.207Z","msg":"[verify] test-seq-03 打开成功，事件 49496"}
+{"t":"2026-10-30T17:38:55.192Z","msg":"execute targetId=test-seq-03 keys=[\"fromJsonl\",\"jsonlFrom\",\"jsonlUntil\",\"targetId\"]"}
+{"t":"2026-10-30T17:38:55.193Z","msg":"fromJsonl：E:/DSH-Workspace/_title.jsonl"}
+{"t":"2026-10-30T17:38:55.194Z","msg":"[jsonl] 切点补齐到 turn 边界，实际取到 1"}
+{"t":"2026-10-30T17:38:55.206Z","msg":"[jsonl] seq 偏移 49496（批次首 0 → 49496）"}
+{"t":"2026-10-30T17:38:55.211Z","msg":"jsonl append+flush ok，1 条 | turn 0 | surface 0MB"}
+{"t":"2026-10-30T17:39:06.088Z","msg":"execute targetId=test-seq-03 keys=[\"verify\",\"targetId\"]"}
+{"t":"2026-10-30T17:39:07.185Z","msg":"[verify] test-seq-03 打开成功，事件 49497"}

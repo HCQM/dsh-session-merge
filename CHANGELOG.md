@@ -5,6 +5,30 @@
 
 ---
 
+## [0.5.0] — 2026-10-31
+
+用一个 **49,513 事件 / 1,310 turn / 22.52 MB** 的真实大会话跑了全量功能测试，修掉 7 个实测出来的 bug。
+
+### 修复（全部来自实测）
+- **`data.sourceEventSeq` 未重映射**（影响 `copySequential` / `fullCopy` / `mixCopy` / `makeRoot`）：`command` 等事件用的是**单数** `sourceEventSeq`，之前只处理了事件级的复数 `sourceEventSeqs`，导致写出的会话直接 `SessionFormatError: command sourceEventSeq must name an earlier event`、打不开。
+- **`planCompact` 切点永远为 0**：原来用 `turnEnds.has(surfaceSeq)` 判断，但 `surface` 里只有消息事件、根本没有 `turn/end`，条件永远为假。改成判断"当前事件是否是它所在 turn 的最后一个可见 surface 事件"。
+- **`planCompact` 被 `sources 为空` 拦截**：豁免名单里漏了它。
+- **`inspect` 只传 `targetId` 时崩溃**：`firstSourceCwd(undefined)` → `path.join` 报 `The "path" argument must be of type string`。三个函数都加了判空。
+- **独立 `verify` 模式丢失**：删 deprecated 的 merge 模式时被连带删掉，只剩 `inspect + verify` 组合。已补回。
+- **`session_unlock` 报 `targetId is not defined`**：它是独立工具的 execute，作用域里没有外层 `targetId`，改用 `args.targetId`。
+- **`makeRoot` 两处结构错误**：
+  - header 是**顶层字段**（不在 `data` 里），原来当 `data` 读，导致 `createdAt` 丢失 → `session metadata createdAt must be a non-negative safe integer`；
+  - `persistence.create()` **不能带 `type`**（DSH 内部补），带了会 `format v4 header has unexpected field type`。
+- **校验器误报**：`compaction/start 在 turn 外` 原来是硬失败，但实测原会话自身就有 3 个在 turn 外——DSH 允许，改成只在 turn 打开时校验一致性。
+
+### 移除
+- **`foldTarget`（折叠）**：它用 `replace` 把原文从 surface 换掉，和"保证上下文完整"的目标相反。救援流程改为 `planCompact` 算切点 → `forkClone` 分段 → 手动 `/compact` → `fullCopy` 拼回。
+
+### 验证
+11 个功能全部实测通过：`inspect` / `verify` / `inspect+verify` / `planCompact` / `makeRoot` / `forkClone` / `fullCopy` / `mixCopy` / `fromJsonl` / `copySequential` / `session_unlock`。
+
+---
+
 ## [0.4.0] — 2026-10-31
 
 ### 新增

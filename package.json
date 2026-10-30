@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-merge",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "DSH 会话合并/追加：fork 克隆、全类型复制、时间窗混合、surface 折叠、JSONL 区间写入；三层校验（本地预检 / 六层深度 / 官方 open）。实测 DSH 桌面端 0.2.1-rc.5。",
   "license": "MIT",
   "author": "HCQM",
@@ -44,7 +44,7 @@
   "dsh": {
     "id": "dsh-session-merge",
     "name": "会话合并",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "permissions": "读取会话列表与事件；写入、折叠、克隆会话",
     "bundle": {
       "patch": "./cordis.patch.yml"

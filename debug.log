@@ -165,3 +165,67 @@
 [2026-10-30T17:29:17.830Z] execute targetId=test-fork-01 keys=["resumeOnly","targetId"]
 [2026-10-30T17:29:17.831Z] resumeOnly：test-fork-01
 [2026-10-30T17:29:18.931Z] resumeOnly 失败: Error session "test-fork-01" already exists
+[2026-10-30T17:32:21.256Z] apply 开始（v10）
+[2026-10-30T17:32:21.259Z] apply 结束（v11）
+[2026-10-30T17:32:33.401Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 keys=["verify","targetId"]
+[2026-10-30T17:32:34.584Z] [verify] session-14afce5f-7138-4b85-91f5-90224a0d5401 打开成功，事件 49513
+[2026-10-30T17:32:44.237Z] execute targetId=test-mkroot-03 keys=["makeRoot","sourceId","targetId"]
+[2026-10-30T17:32:45.120Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:32:45.122Z] [makeRoot] 源事件 49514，找 header
+[2026-10-30T17:32:45.122Z] [makeRoot] header keys=[]
+[2026-10-30T17:32:45.127Z] [makeRoot] create test-mkroot-03
+[2026-10-30T17:32:45.129Z] [makeRoot] create 失败: session metadata createdAt must be a non-negative safe integer
+[2026-10-30T17:34:04.789Z] apply 开始（v10）
+[2026-10-30T17:34:04.794Z] apply 结束（v11）
+[2026-10-30T17:34:15.901Z] execute targetId=test-mkroot-04 keys=["makeRoot","sourceId","targetId"]
+[2026-10-30T17:34:16.815Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:34:16.816Z] [makeRoot] 源事件 49514，找 header
+[2026-10-30T17:34:16.817Z] [makeRoot] header keys=["type","version","id","createdAt","cwd","isSeeded","delegationDepth","agentPreset"]
+[2026-10-30T17:34:16.822Z] [makeRoot] create test-mkroot-04
+[2026-10-30T17:34:16.824Z] [makeRoot] create 失败: format v4 header has unexpected field type
+[2026-10-30T17:35:12.073Z] apply 开始（v10）
+[2026-10-30T17:35:12.076Z] apply 结束（v11）
+[2026-10-30T17:35:23.853Z] execute targetId=test-mkroot-05 keys=["makeRoot","sourceId","targetId"]
+[2026-10-30T17:35:24.770Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:35:24.772Z] [makeRoot] 源事件 49514，找 header
+[2026-10-30T17:35:24.772Z] [makeRoot] header keys=["type","version","id","createdAt","cwd","isSeeded","delegationDepth","agentPreset"]
+[2026-10-30T17:35:24.778Z] [makeRoot] create test-mkroot-05
+[2026-10-30T17:35:24.897Z] [makeRoot] create ok
+[2026-10-30T17:35:25.773Z] [makeRoot] 生成 49513 条 | 校验问题 0 / header 问题 0
+[2026-10-30T17:35:29.518Z] [makeRoot] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> test-mkroot-05 | 事件 49513 | 解继承 0 | 修 delivery 18
+[2026-10-30T17:35:52.944Z] unlock 调用 targetId=test-mkroot-05 action=diagnose
+[2026-10-30T17:36:02.340Z] execute targetId=test-seq-02 keys=["copySequential","sources","targetId"]
+[2026-10-30T17:36:02.720Z] copySequential：单源直线复制
+[2026-10-30T17:36:03.648Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:36:03.881Z] copySequential 完成：49496 条事件，1310 turn，44 压缩记录
+[2026-10-30T17:36:03.912Z] 预检通过
+[2026-10-30T17:36:03.926Z] create 模式
+[2026-10-30T17:36:07.248Z] append+flush ok
+[2026-10-30T17:36:36.682Z] execute targetId=test-seq-02 keys=["dryRun","fromJsonl","jsonlFrom","jsonlUntil","targetId"]
+[2026-10-30T17:36:36.683Z] fromJsonl：E:/DSH-Workspace/_title.jsonl
+[2026-10-30T17:36:36.684Z] [jsonl] 切点补齐到 turn 边界，实际取到 1
+[2026-10-30T17:36:36.692Z] [jsonl dryRun] 事件 1 | turn 0 | surface 0.00MB
+[2026-10-30T17:36:45.569Z] execute targetId=test-seq-02 keys=["fromJsonl","jsonlFrom","jsonlUntil","targetId"]
+[2026-10-30T17:36:45.570Z] fromJsonl：E:/DSH-Workspace/_title.jsonl
+[2026-10-30T17:36:45.571Z] [jsonl] 切点补齐到 turn 边界，实际取到 1
+[2026-10-30T17:36:46.509Z] jsonl 写盘失败: session "test-seq-02": stored log is corrupt: SessionFormatError: command sourceEventSeq must name an earlier event (raw log: C:\Users\cloud\.dsh\sessions\--E-DSH-Workspace-~6D4B~8BD5--\test-seq-02\session.v4.jsonl.zstd)
+[2026-10-30T17:36:57.365Z] execute targetId=test-seq-02 keys=["verify","targetId"]
+[2026-10-30T17:36:58.320Z] [verify] test-seq-02 打不开：SessionPersistenceCorruptionError session "test-seq-02": stored log is corrupt: SessionFormatError: command sourceEventSeq must name an earlier event (raw log: C:\Users\cloud\.dsh\sessions\--E-DSH-Workspace-~6D4B~8BD5--\test-seq-02\session.v4.jsonl.zstd)
+[2026-10-30T17:37:52.895Z] apply 开始（v10）
+[2026-10-30T17:37:52.898Z] apply 结束（v11）
+[2026-10-30T17:38:13.530Z] execute targetId=test-seq-03 keys=["copySequential","sources","targetId"]
+[2026-10-30T17:38:13.912Z] copySequential：单源直线复制
+[2026-10-30T17:38:14.824Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:38:14.974Z] copySequential 完成：49496 条事件，1310 turn，44 压缩记录
+[2026-10-30T17:38:15.024Z] 预检通过
+[2026-10-30T17:38:15.033Z] create 模式
+[2026-10-30T17:38:18.657Z] append+flush ok
+[2026-10-30T17:38:43.026Z] execute targetId=test-seq-03 keys=["verify","targetId"]
+[2026-10-30T17:38:44.207Z] [verify] test-seq-03 打开成功，事件 49496
+[2026-10-30T17:38:55.192Z] execute targetId=test-seq-03 keys=["fromJsonl","jsonlFrom","jsonlUntil","targetId"]
+[2026-10-30T17:38:55.193Z] fromJsonl：E:/DSH-Workspace/_title.jsonl
+[2026-10-30T17:38:55.194Z] [jsonl] 切点补齐到 turn 边界，实际取到 1
+[2026-10-30T17:38:55.206Z] [jsonl] seq 偏移 49496（批次首 0 → 49496）
+[2026-10-30T17:38:55.211Z] jsonl append+flush ok，1 条 | turn 0 | surface 0MB
+[2026-10-30T17:39:06.088Z] execute targetId=test-seq-03 keys=["verify","targetId"]
+[2026-10-30T17:39:07.185Z] [verify] test-seq-03 打开成功，事件 49497

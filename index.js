@@ -498,6 +498,12 @@ export function apply(ctx) {
               const m = seqMap.get(data.headerSeq) ?? preMap.get(data.headerSeq);
               if (typeof m === 'number') data.headerSeq = m; else delete data.headerSeq;
             }
+            // command 等事件用单数 data.sourceEventSeq，必须重映射到更早的 seq
+            if (typeof data.sourceEventSeq === 'number') {
+              const m = seqMap.get(data.sourceEventSeq) ?? preMap.get(data.sourceEventSeq);
+              if (typeof m === 'number' && m < newSeq) data.sourceEventSeq = m;
+              else delete data.sourceEventSeq;
+            }
             if (ev.type === 'session/title' && Array.isArray(data.messageSeqs)) {
               data.messageSeqs = data.messageSeqs.map((x) => seqMap.get(x) ?? preMap.get(x)).filter((x) => typeof x === 'number');
             }
@@ -694,6 +700,12 @@ export function apply(ctx) {
               const m = seqMap2.get(data.headerSeq);
               if (typeof m === 'number') data.headerSeq = m; else delete data.headerSeq;
             }
+            // command 等事件用单数 data.sourceEventSeq
+            if (typeof data.sourceEventSeq === 'number') {
+              const m = seqMap2.get(data.sourceEventSeq);
+              if (typeof m === 'number' && m < s2) data.sourceEventSeq = m;
+              else delete data.sourceEventSeq;
+            }
             if (e.type === 'tool/call' && data.callId && !resolved2.has(data.callId)) { orphan2 += 1; continue; }
             if (e.type === 'tool/result') {
               const rid = data.message?.toolCallId;
@@ -767,7 +779,7 @@ export function apply(ctx) {
           log('[verify] ' + vid + ' 打开成功，事件 ' + evs2.length);
           return {
             ok: true, mode: 'verify', id: vid, events: evs2.length,
-            header: (evs2[0] && evs2[0].type === 'session') ? evs2[0].data : null,
+            header: (evs2[0] && evs2[0].type === 'session') ? { version: evs2[0].version, id: evs2[0].id, createdAt: evs2[0].createdAt, cwd: evs2[0].cwd, isSeeded: evs2[0].isSeeded, delegationDepth: evs2[0].delegationDepth, agentPreset: evs2[0].agentPreset, parentSession: evs2[0].parentSession ?? null } : null,
             note: 'DSH 自己的 open 路径：能打开 = DSH 认；报错文案与界面一字不差',
           };
         } catch (err) {
@@ -889,12 +901,19 @@ export function apply(ctx) {
         log('[makeRoot] 源事件 ' + evs.length + '，找 header');
         const oldHeader = evs.find((e) => e.type === 'session') || null;
         if (!oldHeader) return { ok: false, error: '源会话里没有 header' };
-        log('[makeRoot] header keys=' + JSON.stringify(Object.keys(oldHeader.data || {})));
-        // 新 header：isSeeded=false，删掉 parentSession（不能写 null，null 非法）
-        const hd = { ...(oldHeader.data || {}) };
+        log('[makeRoot] header keys=' + JSON.stringify(Object.keys(oldHeader)));
+        // header 是顶层字段（不在 data 里）：取已知字段重建，避免带进 type/seq/time
+        const HEADER_FIELDS = ['version', 'id', 'createdAt', 'cwd', 'isSeeded', 'delegationDepth', 'agentPreset', 'parentSession', 'origin'];
+        const hd = {};
+        for (const k of HEADER_FIELDS) if (oldHeader[k] !== undefined) hd[k] = oldHeader[k];
         hd.id = dstId;
         hd.isSeeded = false;
         delete hd.parentSession;
+        // createdAt 必须是毫秒数字（TS 里是 number；万一拿到 ISO 字符串就转）
+        if (typeof hd.createdAt !== 'number' || !Number.isFinite(hd.createdAt) || hd.createdAt < 0) {
+          const t = typeof hd.createdAt === 'string' ? Date.parse(hd.createdAt) : NaN;
+          hd.createdAt = Number.isFinite(t) && t > 0 ? t : now;
+        }
         if (typeof args.cwd === 'string' && args.cwd) hd.cwd = args.cwd;
         let cutCount = 0;
         let deliveryFixed = 0;
@@ -906,7 +925,7 @@ export function apply(ctx) {
         let h = null;
         try {
           log('[makeRoot] create ' + dstId);
-          h = await persistence.create({ ...hd, type: 'session' });
+          h = await persistence.create(hd);
           log('[makeRoot] create ok');
         } catch (err) {
           log('[makeRoot] create 失败: ' + (err?.message ?? err));
@@ -940,6 +959,12 @@ export function apply(ctx) {
             if (Array.isArray(e.sourceEventSeqs)) {
               const mapped = [...new Set(e.sourceEventSeqs.map((x) => seqMap.get(x)).filter((x) => typeof x === 'number' && x < ev.seq))];
               if (mapped.length) ev.sourceEventSeqs = mapped;
+            }
+            // 单数 sourceEventSeq（command 等）也要指向更早的 seq
+            if (typeof ev.data.sourceEventSeq === 'number') {
+              const m = seqMap.get(ev.data.sourceEventSeq);
+              if (typeof m === 'number' && m < ev.seq) ev.data.sourceEventSeq = m;
+              else delete ev.data.sourceEventSeq;
             }
             out.push(ev);
           }
@@ -1242,6 +1267,12 @@ export function apply(ctx) {
               if (typeof rs === 'number' && typeof re === 'number') data.shadowedRange = { start: rs, end: re };
             }
             compactionCount += 1;
+          }
+          // command 等事件用单数 data.sourceEventSeq，必须一起重映射（指向更早的 seq）
+          if (typeof data.sourceEventSeq === 'number') {
+            const mappedS = seqMap.get(data.sourceEventSeq) ?? preMap.get(data.sourceEventSeq);
+            if (typeof mappedS === 'number' && mappedS < newSeq) data.sourceEventSeq = mappedS;
+            else delete data.sourceEventSeq;
           }
 
           seqMap.set(ev.seq, newSeq);
