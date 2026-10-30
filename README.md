@@ -1,126 +1,188 @@
-# dsh-session-merge
+# 🔀 dsh-session-merge — 把会话救回来
 
-> [English](./README.en.md) · 简体中文
+[![version](https://img.shields.io/badge/version-0.4.0-blue)](./CHANGELOG.md)
+[![license](https://img.shields.io/badge/license-MIT-orange)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/HCQM/dsh-session-merge?style=flat)](https://github.com/HCQM/dsh-session-merge/stargazers)
+[![issues](https://img.shields.io/github/issues/HCQM/dsh-session-merge)](https://github.com/HCQM/dsh-session-merge/issues)
+[![platform](https://img.shields.io/badge/platform-DSH%20Desktop-8A2BE2)](https://github.com/HCQM/dsh-session-merge)
+[![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.5-purple)](https://github.com/HCQM/dsh-session-merge)
 
-把多个 DeepSeek Harness（DSH）会话合成一个，或者往会话尾部追加另一段历史。
+**简体中文** · [English](README.en.md)
 
-所有写入都走 DSH 自己的 `sessionPersistence`，不直接改磁盘上的 `session.v4.jsonl.zstd` —— 外部生成的文件格式 DSH 一律不认（实测四种写法全部失败）。
+> **会话爆了、既不能继续也不能压缩——把它救回来。**
+>
+> 全程不删一个事件，三层校验兜底，写入的每一个字节 DSH 都认。
 
-## 支持的 DSH 版本
+- 🎯 **只为救援而生** —— 不是日常插件，平时开着什么都不变；只在会话卡死时登场。
+- 🔒 **上下文完整性优先** —— 合并/追加都不删事件，`/compact` 也只追加摘要；原文永远在日志里。
+- 📐 **算切点，不靠猜** —— `planCompact` 按 `turn/end` 边界算出每段 ≤ 预算的位置，避开已有压缩记录。
+- 🛡️ **三层校验** —— 写入前预检 / 六层深度 / 官方 `open` 校验，报错文案与 DSH 界面一字不差。
+- 🧱 **断点续写** —— 每批 1.4~1.5 MB，压一次写一批，压完接着来。
 
-| 项 | 值 |
-|---|---|
-| **实测版本** | **DSH 桌面端 0.2.1-rc.5**（`@deepseek-ai/dsh-desktop`）|
-| peer 依赖 | `@deepseek-ai/dsh` >= 0.2.1-rc.5 < 0.3.0-0 |
-| 会话格式 | v4（`session.v4.jsonl.zstd`）|
+<p align="center"><strong>⭐ 如果你也遇到过"上下文爆了救不回来"，点个 star 让我知道。</strong><br/>
+<sub>一行安装：<code>dsh plugin --profile desktop add dsh-session-merge</code></sub></p>
 
-插件依赖的是会话格式和持久化接口。更新的 DSH 版本可能仍然可用，但升级后请先跑一次 `verify`。
+## ⚡ 快速开始
 
-## 为什么需要它
-
-DSH 一个会话堆到几十万 token 后，每句话都在为整段历史付费；想换新会话又会丢掉原话。这个插件提供两条路：
-
-- **合并**：把旧会话的完整历史并进一个新会话，压缩节点跟着走；
-- **追加**：往现有会话尾部补一段历史（比如两个窗口并行聊过的内容）。
-
-## 安装
-
-插件目录：`<DSH_HOME>/plugins/dsh-session-merge/`，然后在 profile 的 `dsh.profile.bundles` 里登记（bundle 型插件必须登记，否则不加载）：
-
-```yaml
-# profiles/desktop/cordis.patch.yml 或 profile 配置
-bundles:
-  - dsh-session-merge
+```bash
+dsh plugin --profile desktop add dsh-session-merge
+# 重启 DSH → 插件列表里出现「会话合并」
 ```
 
-改完重启 DSH（**插件没有可靠热载**，改 `index.js` 不会触发重载）。
+装完先跑三个**只读**动作，不写任何东西：
 
-## 工具：`session_merge_build`
+```js
+// 看结构
+session_merge_build({ inspect: true, targetId: "<会话id>" })
 
-一个工具，靠参数切模式：
+// DSH 能不能打开
+session_merge_build({ verify: true, targetId: "<会话id>" })
 
-| 参数 | 模式 | 用途 |
-|---|---|---|
-| `inspect: true` | 只读 | 查会话结构：事件数、turn、surface 体积、压缩节点、时间范围、类型分布 |
-| `verify: true` | 只读 | **官方校验**：调 DSH 自己的 `persistence.open` 试读，能打开=DSH 认，报错文案与界面一字不差 |
-| `forkClone: true` | fork | 用官方 `sessions.fork` 克隆源会话（保留压缩节点、surface、seq）|
-| `fullCopy: true` | 复制 | 多源全类型复制，按 assistant 回复去重；`keepCompaction` 保留源压缩记录 |
-| `mixCopy: true` | 混合 | 按时间窗混合多源，turn 块按时间排序；`byteBudget` 到量就停并返回 `nextFrom` |
-| `foldTarget: true` | 折叠 | 把目标会话早期 surface 折叠成一条 replace（只追加，不删原文）|
-| `fromJsonl: "路径"` | 写入 | 按 `jsonlFrom`/`jsonlUntil` 区间写本地 JSONL；自动补 turn 边界、自动 seq 偏移 |
-| `copySequential: true` | 直线 | 单源按事件顺序复制，保留压缩事件并重映射全部 seq 引用 |
-| `resumeOnly: true` | 落盘 | 只 resume 目标会话再释放，触发落盘 |
-| （默认） | 合并 | 按 turn 块合并多源（**deprecated**，不保留压缩记录，surface 会膨胀，建议用 `fullCopy`）|
+// 切点算好了没有、分几段、每段多大
+session_merge_build({ planCompact: true, targetId: "<会话id>" })
+```
 
-所有写入模式都支持 `dryRun: true`：只报告规模，不写盘。
+## 🩺 它到底救什么
 
-另有 `session_unlock`：诊断目标会话的写句柄，必要时尝试释放（目标在 GUI 里开着时会占用）。
+一个具体的死锁（实测遇到的那次）：
 
-## 校验器的三层
+```
+requested 1,370,066 tokens > 1,048,576 (maximum context length)
+```
 
-| 层 | 是什么 | 什么时候用 |
-|---|---|---|
-| `validate-full.mjs` | 写入前**轻量预检**：surface 折叠、turn/step/tool 生命周期、request/header、compaction 配对、sourceEventSeqs、header 字段、seq 连续性 | 每次写入前自动跑 |
-| `deep-validate.mjs` | **六层深度校验**（从独立校验器移植）：帧 / header / 路径 / 事件稠密与类型表 / 继承关系 / 内嵌流重放 | 写入后、排障时 |
-| `verify` 模式 | **官方校验**：直接调 DSH 的 `persistence.open`，报错原文透传 | 要"和 DSH 完全一样"的结论时 |
+会话既不能继续，也不能压缩。为什么压不动？**因为 `/compact` 要把整段 surface 原文一次性发给模型**，超过单次请求上限就发不出去。
 
-独立跑深度校验：
+| 关于 `/compact` 的事实 | 含义 |
+|---|---|
+| 它**不删**任何事件 | 原始对话全部还在日志里，一条不少 |
+| 它只**追加**一条摘要 | 生成摘要 + `shadowedRange` |
+| 之后 AI 看到「摘要 + 压缩点后的原文」| 被覆盖的原文 AI 不再逐字读，但**仍在会话里** |
+
+所以解法是**分段压缩**，不是删、也不是折叠：
+
+```
+inspect 看现状  →  planCompact 算切点  →  按切点 fork 分段
+     →  每段手动 /compact  →  fullCopy 拼回  →  verify 确认
+```
+
+完整命令在 [抢救流程](#-抢救流程)。
+
+## 🛡️ 三层校验（这个项目的核心）
+
+搬运事件谁都会，**搬完让 DSH 认**才是难点。所以三层独立校验：
+
+| 层 | 谁 | 查什么 | 何时跑 |
+|---|---|---|---|
+| 轻量预检 | `validate-full.mjs` | surface 折叠、turn/step/tool 生命周期、compaction 配对、header 字段、seq 连续 | 每次写入前自动 |
+| 六层深度 | `deep-validate.mjs` | 帧 / header / 路径 / 事件稠密与类型表 / 继承关系 / 内嵌流重放 | 写入后、排障时 |
+| 官方校验 | `verify` 模式 | 直接调 DSH 的 `persistence.open` | 要“和 DSH 完全一样”的结论时 |
+
+深度校验可以独立跑：
 
 ```bash
 node bin/validate.mjs <会话id前缀|目录|文件> [--json] [--no-replay] [--strict-replay]
+node bin/validate.mjs --all     # 批量校验全部会话
 ```
 
-> 深度校验依赖 DSH 自己的 `@deepseek-ai/dsh-*` 模块。在 DSH 进程里（插件内）可以直接用；独立跑时要让这些包可解析，否则会**降级**（跳过 header 解码、关系断言和重放，只查帧/路径/seq）。
+## 📏 硬约束（实测，不是估算）
 
-## 硬约束（实测）
+| 项 | 数值 | 来源 |
+|---|---|---|
+| 单次请求上限 | 1,048,576 tokens | 模型硬限 |
+| completion 预留 | 64K（偶发 256K）| 压缩请求实测 |
+| surface 字节/token | **3.8** | 5.21 MB ≈ 1.37M tokens 反推 |
+| 安全线 | **surface ≤ 3.4 MB** | 约 900K tokens，再大 `/compact` 必失败 |
 
-| 项 | 数值 |
-|---|---|
-| 单次请求上限 | 1,048,576 tokens |
-| completion 预留 | 64K（偶发 256K）|
-| surface 字节/token | 约 **3.8** |
-| **安全线** | **surface ≤ 3.4 MB**（约 900K tokens）|
+> 关键：能不能压，看的是 **surface 体积**，不是界面上那个百分比。
 
-`/compact` 会把压缩后的 surface **原文**重新发给模型生成摘要。所以能不能压，看的是 surface 体积，不是界面上那个百分比。
+## 🧰 完整能力
 
-## 典型流程
+一个工具，靠参数切换：
+
+| 参数 | 类型 | 做什么 |
+|---|---|---|
+| `inspect` | 只读 | 事件 / turn / surface 体积 / 压缩节点 / 时间范围 / 类型分布 |
+| `verify` | 只读 | 官方 `open` 校验，报错原文透传 |
+| `planCompact` | 只读 | 算可压缩切点（`cuts[]` + 每段体积）|
+| `forkClone` | 写 | 官方 `sessions.fork` 克隆，保留压缩节点 |
+| `fullCopy` | 写 | 多源全类型复制，按 assistant 回复去重 |
+| `mixCopy` | 写 | 按时间窗混合，`byteBudget` 到量停 |
+| `fromJsonl` | 写 | 按区间写 JSONL，自动补 turn 边界 / 自动 seq 偏移 |
+| `copySequential` | 写 | 单源直线复制，重映射 seq |
+| `resumeOnly` | 写 | 只 resume 触发落盘 |
+| `makeRoot` | 写 | 把会话改造成合法根：`isSeeded=false`、删 `parentSession`、继承标记清零、`delivery` 指新 id |
+
+所有写入都支持 `dryRun: true`；另有 `session_unlock` 诊断写句柄。
+
+参数细节：[FEATURES.md](FEATURES.md) · [CONFIG.md](CONFIG.md) · [API.md](API.md)
+
+## 🚑 抢救流程
 
 ```js
-// 1. fork 骨架（保留源自己的压缩节点）
-session_merge_build({ forkClone: true, sources: ["<源会话>"], targetId: "session-merged-x" })
+// 1. 看清现状
+session_merge_build({ inspect: true, targetId: "<卡住的会话>" })
 
-// 2. 离线生成增量 JSONL（自己写脚本，或直接用 fullCopy）
-// 3. 按区间写入，每批 1.4~1.5MB
-session_merge_build({
-  fromJsonl: "<你的工作目录>/_mix.jsonl", jsonlFrom: 0, jsonlUntil: 2467,
-  targetId: "session-merged-x",
-})
+// 2. 让插件算切点（只读，不动任何事件）
+session_merge_build({ planCompact: true, targetId: "<卡住的会话>" })
+// → cuts[]，每个带 cutAfterSeq / prefixMB / prefixTokens
 
-// 4. 每批写完在 GUI 里点一次 /compact，把 surface 压回预算内
-// 5. 重复 3~4，直到写完
-// 6. 收尾：verify 一次，确认 DSH 能打开
+// 3. 按切点逐个 fork（每段都是能压得动的小会话）
+session_merge_build({ forkClone: true, sources: ["<卡住的会话>"], targetId: "<段1>", forkBoundary: <cuts[0].cutAfterSeq> })
+session_merge_build({ forkClone: true, sources: ["<卡住的会话>"], targetId: "<段2>", forkBoundary: <cuts[1].cutAfterSeq> })
+
+// 4. 在 GUI 里对每段手动 /compact
+
+// 5. 拼回一个新会话
+session_merge_build({ fullCopy: true, sources: ["<段1>", "<段2>"], targetId: "<新会话>", keepCompaction: true })
+
+// 6. 确认能打开
+session_merge_build({ verify: true, targetId: "<新会话>" })
 ```
 
-**不要每批重新生成 JSONL** —— 这是重复 turn 的经典来源：切点要一次算好、固定区间逐批写。
+结果：新会话里 AI 读到「几段摘要 + 最后一段原文」——这是 DSH 正常的压缩形态，不是数据丢失。原始事件全部保留在各分支里。
 
-## 校验器规则一览
+> ⚠️ 别用折叠来救。`foldTarget`（0.4.0 已移除）用 `replace` 把原文从 surface 换掉，与"保证上下文完整"相反。
 
-`validate-full.mjs` 把 DSH 真实会拦的规则提前到本地预检：
+## ⚖️ 代价与边界
 
-- `sourceEventSeqs` 必须唯一且都指向更早事件
-- `user/assistant/system/developer` 消息必须带 `source.kind`
-- `assistant/message` 必须有 `message.content` 和 `stream`
-- `tool/result` 必须有 `message.source.callId`
-- `session/end-seed { inherited: true }` 直接判死
-- `compaction/start` 必须落在打开着的 turn 内、turn 值匹配
-- `compaction/summary` 必须对上 start 的 `compactionId` + 同 turn
-- header 必需字段齐全、无未知字段、`parentSession` 不能写 `null`
-- `seq` 必须严格 +1 递增
+| 是 | 不是 |
+|---|---|
+| 一次性救援工具 | 日常插件 |
+| 保证上下文完整（0 删除）| 省钱工具（只会让 surface 变大）|
+| 三层校验兜底 | 记忆系统（压缩后 AI 读到的仍是摘要）|
 
-## 已知坑
+真正该长期活下来的东西在**记忆库**（记忆卡 / `memory_recall` / 日记）。会话只是“最近这段”的容器。
 
-写合并逻辑时踩过的，都在 [`session-merge-runbook.md`](./session-merge-runbook.md)：时间倒退、重复 turn、压缩超限、`already owned by an active write handle`、8 种打不开的报错。
+**跨会话搬运时确实会丢的**：
 
-## License
+| 丢的 | 原因 | 防法 |
+|---|---|---|
+| 空回复的唤醒记录 | 去重被判重复 | `fullCopy` 空回复不参与去重 |
+| 未闭合的 turn | 跨会话拼接 | 切点落 `turn/end`（自动补）|
+| 未结算的工具调用 | `callId` 对不上 | 丢弃孤儿 call/result |
+| 结构事件（`agent/inbox/spliced` 等）| 跨会话校验失败 | 一律跳过 |
+| 严格时间顺序 | 并行会话本就交错 | 保留真实时间戳 |
 
-MIT
+## 📚 文档
+
+| 文档 | 内容 |
+|---|---|
+| [INSTALL.md](INSTALL.md) | 安装、注册、重启、验证 |
+| [FEATURES.md](FEATURES.md) | 9 种操作逐个说明 |
+| [CONFIG.md](CONFIG.md) | 全部参数与默认值 |
+| [API.md](API.md) | 接口契约 |
+| [CHANGELOG.md](CHANGELOG.md) | 0.1.0 → 0.4.0 |
+| [session-merge-runbook.md](session-merge-runbook.md) | 排障手册：12 个坑 + 验收清单 |
+| [README.en.md](README.en.md) | English |
+
+## 🧩 兼容性
+
+| 项 | 值 |
+|---|---|
+| 平台 | DSH 桌面端（Electron），实测 **0.2.1-rc.5** |
+| 会话格式 | v4（`session.v4.jsonl.zstd`）|
+| 操作系统 | Windows 实测；路径全走 `node:path`，Linux/macOS 理论可用 |
+
+## 📄 License
+
+[MIT](./LICENSE) © 2026 HCQM

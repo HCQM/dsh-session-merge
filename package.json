@@ -24,6 +24,11 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
+    "INSTALL.md",
+    "FEATURES.md",
+    "CONFIG.md",
+    "API.md",
+    "CHANGELOG.md",
     "LICENSE",
     "session-merge-runbook.md"
   ],

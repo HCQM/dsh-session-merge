@@ -199,8 +199,11 @@ export function validateEventsFull(events, startTurn = 1, opts = {}) {
         break
       case 'compaction/start':
         if (compaction !== null) fail('compaction/start 重叠')
-        if (turn === null) fail('compaction/start 在 turn 外（DSH 要求落在打开着的 turn 内）')
-        else if (typeof d.turn === 'number' && d.turn !== turn) fail(`compaction/start 的 turn(${d.turn}) 与打开的 turn(${turn}) 不一致`)
+        // 实测：DSH 自己生成的会话里也有 compaction/start 落在 turn 外，
+        // 所以这里只在 turn 打开时校验一致性，turn 外不判死
+        if (turn !== null && typeof d.turn === 'number' && d.turn !== turn) {
+          fail(`compaction/start 的 turn(${d.turn}) 与打开的 turn(${turn}) 不一致`)
+        }
         compaction = { id: d.compactionId, turn: d.turn, summarized: false }
         break
       case 'compaction/summary':

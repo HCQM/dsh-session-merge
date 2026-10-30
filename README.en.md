@@ -1,126 +1,187 @@
-# dsh-session-merge
+# 🔀 dsh-session-merge — rescue a stuck session
 
-> English · [简体中文](./README.md)
+[![version](https://img.shields.io/badge/version-0.4.0-blue)](./CHANGELOG.md)
+[![license](https://img.shields.io/badge/license-MIT-orange)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/HCQM/dsh-session-merge?style=flat)](https://github.com/HCQM/dsh-session-merge/stargazers)
+[![issues](https://img.shields.io/github/issues/HCQM/dsh-session-merge)](https://github.com/HCQM/dsh-session-merge/issues)
+[![platform](https://img.shields.io/badge/platform-DSH%20Desktop-8A2BE2)](https://github.com/HCQM/dsh-session-merge)
+[![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.5-purple)](https://github.com/HCQM/dsh-session-merge)
 
-Merge several DeepSeek Harness (DSH) sessions into one, or append a stretch of history to the tail of an existing session.
+**English** · [简体中文](README.md)
 
-Every write goes through DSH's own `sessionPersistence` — the plugin never edits `session.v4.jsonl.zstd` on disk. Files generated outside DSH are rejected by DSH (four different formats were tried and all failed).
+> **When a session blows up — can't continue, can't compact — pull it back.**
+>
+> Not one event deleted. Three validation layers. Everything written is something DSH accepts.
 
-## Supported DSH version
+- 🎯 **Built for rescue** — not a daily driver; idle most of the time, shows up when a session is stuck.
+- 🔒 **Context integrity first** — merge/append delete nothing; `/compact` only appends a summary; raw text stays in the log forever.
+- 📐 **Cut points, not guesses** — `planCompact` computes `turn/end` boundaries where each segment fits the budget, clear of existing compaction ranges.
+- 🛡️ **Three validation layers** — pre-write check / six-layer deep check / official `open` check, error text matching the DSH UI verbatim.
+- 🧱 **Resumable writes** — 1.4–1.5 MB per batch; compact once, write a batch, repeat.
 
-| Item | Value |
-|---|---|
-| **Tested against** | **DSH Desktop 0.2.1-rc.5** (`@deepseek-ai/dsh-desktop`) |
-| Peer dependency | `@deepseek-ai/dsh` >= 0.2.1-rc.5 < 0.3.0-0 |
-| Session format | v4 (`session.v4.jsonl.zstd`) |
+<p align="center"><strong>⭐ If you've ever hit "context blew up and I can't get it back", a star helps.</strong><br/>
+<sub>One-liner: <code>dsh plugin --profile desktop add dsh-session-merge</code></sub></p>
 
-The session format and the persistence API are what this plugin depends on. A newer DSH release may still work, but re-run `verify` after upgrading.
+## ⚡ Quick start
 
-## Why
-
-Once a DSH session grows past a few hundred thousand tokens, every message pays for the whole history. Starting a new session would lose the original words. This plugin offers two paths:
-
-- **Merge**: fold a full old session into a new one, keeping its compaction nodes;
-- **Append**: tack a stretch of history onto the tail of an existing session (e.g. two windows that ran in parallel).
-
-## Install
-
-Copy to `<DSH_HOME>/plugins/dsh-session-merge/`, then register it in the profile's `dsh.profile.bundles` (bundle-type plugins are not loaded unless registered):
-
-```yaml
-# profiles/desktop/cordis.patch.yml or profile config
-bundles:
-  - dsh-session-merge
+```bash
+dsh plugin --profile desktop add dsh-session-merge
+# restart DSH → the plugin appears in the list
 ```
 
-Restart DSH afterwards. **There is no reliable hot reload** — editing `index.js` does not trigger a reload.
+Then try the three **read-only** actions — nothing is written:
 
-## Tool: `session_merge_build`
+```js
+// Structure
+session_merge_build({ inspect: true, targetId: "<session-id>" })
 
-One tool, switched by parameters:
+// Can DSH open it?
+session_merge_build({ verify: true, targetId: "<session-id>" })
 
-| Parameter | Mode | What it does |
-|---|---|---|
-| `inspect: true` | read-only | Session structure: events, turns, surface size, compaction nodes, time range, type histogram |
-| `verify: true` | read-only | **Official check**: calls DSH's own `persistence.open`; opens = DSH accepts it, and error text matches the UI verbatim |
-| `forkClone: true` | fork | Official `sessions.fork` clone (keeps compaction nodes, surface, seq) |
-| `fullCopy: true` | copy | Multi-source full-type copy, deduplicated by assistant reply; `keepCompaction` keeps source compaction records |
-| `mixCopy: true` | mix | Time-window mixing, turn blocks ordered by time; `byteBudget` stops at the limit and returns `nextFrom` |
-| `foldTarget: true` | fold | Fold early surface of the target into one replace event (append-only, original stays in the log) |
-| `fromJsonl: "path"` | write | Write a local JSONL range (`jsonlFrom`/`jsonlUntil`); auto-extends to turn boundary, auto-offsets seq |
-| `copySequential: true` | linear | Single-source copy in event order, compaction events kept and all seq references remapped |
-| `resumeOnly: true` | flush | Resume the target then release, to trigger a flush |
-| (default) | merge | Merge by turn blocks (**deprecated** — doesn't keep compaction records, surface inflates; use `fullCopy`) |
+// Are there cut points, how many segments, how big
+session_merge_build({ planCompact: true, targetId: "<session-id>" })
+```
 
-All write modes accept `dryRun: true` — report only, nothing written.
+## 🩺 What it actually rescues
 
-Also `session_unlock`: diagnose the target's write handle and try to release it (a session open in the GUI holds one).
+A concrete deadlock (one we actually hit):
 
-## Three layers of validation
+```
+requested 1,370,066 tokens > 1,048,576 (maximum context length)
+```
 
-| Layer | What it is | When |
-|---|---|---|
-| `validate-full.mjs` | Pre-write **light check**: surface folding, turn/step/tool lifecycle, request/header, compaction pairing, sourceEventSeqs, header fields, seq continuity | Runs before every write |
-| `deep-validate.mjs` | **Six-layer deep check** (ported from the standalone validator): frames / header / path / event density and type table / inheritance / embedded-stream replay | After writes, when debugging |
-| `verify` mode | **Official check**: calls DSH's `persistence.open`, error text passed through verbatim | When you need "exactly what DSH says" |
+The session can neither continue nor compact. Why can't it compact? **Because `/compact` sends the entire surface verbatim to the model in one request** — above the per-request limit, it can't be sent.
 
-Run the deep check standalone:
+| Fact about `/compact` | Meaning |
+|---|---|
+| It **deletes nothing** | The original conversation is all still in the log |
+| It only **appends** a summary | Summary + `shadowedRange` |
+| Afterwards the AI sees "summary + raw text after the cut" | Covered text isn't read verbatim, but **still in the session** |
+
+So the fix is **compacting in segments** — not deleting, not folding:
+
+```
+inspect → planCompact → fork at cuts → /compact each segment → fullCopy back → verify
+```
+
+Full commands in [Rescue flow](#-rescue-flow).
+
+## 🛡️ Three validation layers (the core)
+
+Anyone can move events. **Making DSH accept what you moved** is the hard part. Hence three independent layers:
+
+| Layer | Who | Checks | When |
+|---|---|---|---|
+| Light pre-check | `validate-full.mjs` | surface folding, turn/step/tool lifecycle, compaction pairing, header fields, seq continuity | Auto, before every write |
+| Six-layer deep | `deep-validate.mjs` | frames / header / path / event density and type table / inheritance / embedded-stream replay | After writes, when debugging |
+| Official | `verify` mode | DSH's `persistence.open` | When you need "exactly what DSH says" |
+
+Standalone:
 
 ```bash
 node bin/validate.mjs <session-id-prefix|dir|file> [--json] [--no-replay] [--strict-replay]
+node bin/validate.mjs --all     # validate every session
 ```
 
-> The deep check depends on DSH's own `@deepseek-ai/dsh-*` modules. Inside the DSH process they resolve; when run standalone, if they can't be resolved it **degrades** (skips header decode, relationship assertions and replay; still checks frames/path/seq).
+## 📏 Hard limits (measured, not estimated)
 
-## Hard limits (measured)
+| Item | Value | Source |
+|---|---|---|
+| Single request cap | 1,048,576 tokens | Model hard limit |
+| Completion reserve | 64K (occasionally 256K) | Measured compaction requests |
+| Bytes per token | **3.8** | Derived: 5.21 MB ≈ 1.37M tokens |
+| Safe line | **surface ≤ 3.4 MB** | ≈900K tokens; above this `/compact` always fails |
+
+> Key: whether a compaction succeeds depends on **surface size**, not the percentage in the UI.
+
+## 🧰 Capabilities
+
+One tool, switched by parameters:
+
+| Parameter | Kind | Purpose |
+|---|---|---|
+| `inspect` | read-only | events / turns / surface size / compaction nodes / time range / type histogram |
+| `verify` | read-only | official `open` check, error text passed through |
+| `planCompact` | read-only | compute compactable cut points (`cuts[]` + per-segment size) |
+| `forkClone` | write | official `sessions.fork` clone, keeps compaction nodes |
+| `fullCopy` | write | multi-source full-type copy, dedup by assistant reply |
+| `mixCopy` | write | time-window mixing, stops at `byteBudget` |
+| `fromJsonl` | write | write a JSONL range; auto turn boundary, auto seq offset |
+| `copySequential` | write | single-source linear copy, seq remapped |
+| `resumeOnly` | write | resume then release, to trigger a flush |
+| `makeRoot` | write | turn a session into a legal root: `isSeeded=false`, drop `parentSession`, clear inherited markers, repoint `delivery` |
+
+All writes accept `dryRun: true`; `session_unlock` diagnoses the write handle.
+
+Details: [FEATURES.md](FEATURES.md) · [CONFIG.md](CONFIG.md) · [API.md](API.md)
+
+## 🚑 Rescue flow
+
+```js
+// 1. See the current state
+session_merge_build({ inspect: true, targetId: "<stuck session>" })
+
+// 2. Let the plugin compute cut points (read-only, touches no events)
+session_merge_build({ planCompact: true, targetId: "<stuck session>" })
+// → cuts[], each with cutAfterSeq / prefixMB / prefixTokens
+
+// 3. Fork at each cut (every segment is a small session that can compact)
+session_merge_build({ forkClone: true, sources: ["<stuck session>"], targetId: "<seg1>", forkBoundary: <cuts[0].cutAfterSeq> })
+session_merge_build({ forkClone: true, sources: ["<stuck session>"], targetId: "<seg2>", forkBoundary: <cuts[1].cutAfterSeq> })
+
+// 4. Run /compact on each segment in the GUI
+
+// 5. Stitch them into a new session
+session_merge_build({ fullCopy: true, sources: ["<seg1>", "<seg2>"], targetId: "<new>", keepCompaction: true })
+
+// 6. Confirm DSH can open it
+session_merge_build({ verify: true, targetId: "<new>" })
+```
+
+Result: the AI reads "a few summaries + the raw text of the last segment" — DSH's normal compacted shape, not data loss. Every original event remains in the branches.
+
+> ⚠️ Don't rescue by folding. `foldTarget` (removed in 0.4.0) used `replace` to swap the original out of the surface — the opposite of context integrity.
+
+## ⚖️ Cost and boundaries
+
+| It is | It isn't |
+|---|---|
+| A one-off rescue tool | A daily driver |
+| Context integrity (0 deletions) | A cost saver (surface only grows) |
+| Backed by three validation layers | A memory system (after compaction the AI reads a summary) |
+
+What must survive long-term belongs in a **memory system** (cards / `memory_recall` / a journal). A session is just the container for "the recent stretch".
+
+**What is actually lost when moving across sessions**:
+
+| Lost | Why | Mitigation |
+|---|---|---|
+| Wake-up records with empty replies | Dedup treats them as duplicates | Empty replies don't participate in `fullCopy` dedup |
+| Unclosed turns | Cross-session stitching | Cut points land on `turn/end` (auto-extended) |
+| Unsettled tool calls | `callId` mismatch | Orphan calls/results dropped |
+| Structural events (`agent/inbox/spliced` etc.) | Fail cross-session validation | Always skipped |
+| Strict chronological order | Parallel sessions interleave | Real timestamps kept |
+
+## 📚 Docs
+
+| Doc | Contents |
+|---|---|
+| [INSTALL.md](INSTALL.md) | Install, register, restart, verify |
+| [FEATURES.md](FEATURES.md) | All 9 operations |
+| [CONFIG.md](CONFIG.md) | All parameters and defaults |
+| [API.md](API.md) | Tool contract |
+| [CHANGELOG.md](CHANGELOG.md) | 0.1.0 → 0.4.0 |
+| [session-merge-runbook.md](session-merge-runbook.md) | Runbook: 12 pitfalls + checklist |
+| [README.md](README.md) | 简体中文 |
+
+## 🧩 Compatibility
 
 | Item | Value |
 |---|---|
-| Single request cap | 1,048,576 tokens |
-| Completion reserve | 64K (occasionally 256K) |
-| Bytes per token | ~**3.8** |
-| **Safe line** | **surface ≤ 3.4 MB** (~900K tokens) |
+| Platform | DSH Desktop (Electron), tested **0.2.1-rc.5** |
+| Session format | v4 (`session.v4.jsonl.zstd`) |
+| OS | Windows tested; all paths use `node:path`, Linux/macOS should work |
 
-`/compact` sends the compacted surface **verbatim** to the model to produce the summary. So whether a compaction can succeed depends on the surface size, not on the percentage shown in the UI.
+## 📄 License
 
-## Typical flow
-
-```js
-// 1. Fork the skeleton (keeps the source's own compaction nodes)
-session_merge_build({ forkClone: true, sources: ["<source>"], targetId: "session-merged-x" })
-
-// 2. Generate the incremental JSONL offline (your own script, or use fullCopy)
-// 3. Write by range, 1.4–1.5 MB per batch
-session_merge_build({
-  fromJsonl: "<your work dir>/_mix.jsonl", jsonlFrom: 0, jsonlUntil: 2467,
-  targetId: "session-merged-x",
-})
-
-// 4. After each batch, hit /compact in the GUI to pull surface back under budget
-// 5. Repeat 3–4 until done
-// 6. Finish with verify, to confirm DSH can open it
-```
-
-**Never regenerate the JSONL per batch** — that is the classic source of duplicate turns. Compute the cut points once and write fixed ranges.
-
-## Rules enforced locally
-
-`validate-full.mjs` pulls the rules DSH actually enforces into the local pre-check:
-
-- `sourceEventSeqs` must be unique and point to earlier events
-- `user/assistant/system/developer` messages must carry `source.kind`
-- `assistant/message` must have `message.content` and `stream`
-- `tool/result` must have `message.source.callId`
-- `session/end-seed { inherited: true }` is rejected outright
-- `compaction/start` must land inside an open turn and match its turn number
-- `compaction/summary` must match the start's `compactionId` and turn
-- header fields must be complete, no unknown fields, `parentSession` must not be `null`
-- `seq` must increase strictly by 1
-
-## Known pitfalls
-
-Everything learned while writing the merge logic lives in [`session-merge-runbook.md`](./session-merge-runbook.md): time going backwards, duplicate turns, compaction overflow, `already owned by an active write handle`, and eight different "won't open" errors.
-
-## License
-
-MIT
+[MIT](./LICENSE) © 2026 HCQM

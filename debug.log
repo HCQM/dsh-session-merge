@@ -91,3 +91,77 @@
 [2026-10-30T16:36:42.837Z] apply 结束（v11）
 [2026-10-30T16:39:57.915Z] apply 开始（v10）
 [2026-10-30T16:39:57.917Z] apply 结束（v11）
+[2026-10-30T17:17:22.251Z] apply 开始（v10）
+[2026-10-30T17:17:22.254Z] apply 结束（v11）
+[2026-10-30T17:17:43.702Z] execute targetId=session-merged-0134 copySequential=undefined seqFrom=undefined seqUntil=undefined
+[2026-10-30T17:17:43.885Z] [reader] session-merged-0134 -> 5332 事件，遮蔽 1777，保留 5332
+[2026-10-30T17:17:43.905Z] [inspect] session-merged-0134 | 事件 5332 | turn 446 | surface 2.42MB ≈ 666807 tokens
+[2026-10-30T17:17:55.930Z] execute targetId=session-merged-0134 copySequential=undefined seqFrom=undefined seqUntil=undefined
+[2026-10-30T17:17:56.070Z] [reader] session-merged-0134 -> 5332 事件，遮蔽 1777，保留 5332
+[2026-10-30T17:17:56.078Z] [planCompact] session-merged-0134 | surface 0.33MB | 切点 0
+[2026-10-30T17:18:04.765Z] execute targetId=test-mkroot-01 copySequential=undefined seqFrom=undefined seqUntil=undefined
+[2026-10-30T17:18:52.703Z] apply 开始（v10）
+[2026-10-30T17:18:52.706Z] apply 结束（v11）
+[2026-10-30T17:19:27.881Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 copySequential=undefined seqFrom=undefined seqUntil=undefined
+[2026-10-30T17:21:00.720Z] apply 开始（v10）
+[2026-10-30T17:21:00.723Z] apply 结束（v11）
+[2026-10-30T17:21:31.322Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 copySequential=undefined seqFrom=undefined seqUntil=undefined
+[2026-10-30T17:21:32.231Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49513 事件，遮蔽 13983，保留 49513
+[2026-10-30T17:21:33.707Z] [inspect] session-14afce5f-7138-4b85-91f5-90224a0d5401 | 事件 49513 | turn 1310 | surface 22.52MB ≈ 6213764 tokens | verify 通过
+[2026-10-30T17:21:41.521Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 copySequential=undefined seqFrom=undefined seqUntil=undefined
+[2026-10-30T17:23:05.443Z] apply 开始（v10）
+[2026-10-30T17:23:05.446Z] apply 结束（v11）
+[2026-10-30T17:23:18.658Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 keys=["planCompact","targetId"]
+[2026-10-30T17:24:09.303Z] apply 开始（v10）
+[2026-10-30T17:24:09.306Z] apply 结束（v11）
+[2026-10-30T17:24:27.001Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 keys=["planCompact","targetId"]
+[2026-10-30T17:24:27.002Z] [planCompact] 进入，targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:24:27.003Z] [planCompact] 开始读会话 session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:24:27.966Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49513 事件，遮蔽 13983，保留 49513
+[2026-10-30T17:24:27.967Z] [planCompact] 读到 49513
+[2026-10-30T17:24:28.024Z] [planCompact] session-14afce5f-7138-4b85-91f5-90224a0d5401 | surface 2.56MB | 切点 0
+[2026-10-30T17:24:40.254Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 keys=["compactBudgetBytes","planCompact","targetId"]
+[2026-10-30T17:24:40.256Z] [planCompact] 进入，targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:24:40.256Z] [planCompact] 开始读会话 session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:24:41.186Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49513 事件，遮蔽 13983，保留 49513
+[2026-10-30T17:24:41.188Z] [planCompact] 读到 49513
+[2026-10-30T17:24:41.236Z] [planCompact] session-14afce5f-7138-4b85-91f5-90224a0d5401 | surface 2.56MB | 切点 0
+[2026-10-30T17:25:41.043Z] apply 开始（v10）
+[2026-10-30T17:25:41.046Z] apply 结束（v11）
+[2026-10-30T17:25:52.682Z] execute targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401 keys=["compactBudgetBytes","planCompact","targetId"]
+[2026-10-30T17:25:52.683Z] [planCompact] 进入，targetId=session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:25:52.684Z] [planCompact] 开始读会话 session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:25:53.641Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49513 事件，遮蔽 13983，保留 49513
+[2026-10-30T17:25:53.642Z] [planCompact] 读到 49513
+[2026-10-30T17:25:53.702Z] [planCompact] session-14afce5f-7138-4b85-91f5-90224a0d5401 | surface 2.56MB | 切点 3
+[2026-10-30T17:26:05.626Z] execute targetId=test-mkroot-02 keys=["makeRoot","sourceId","targetId"]
+[2026-10-30T17:26:06.502Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49513 事件，遮蔽 13983，保留 49513
+[2026-10-30T17:27:05.821Z] execute targetId=test-fork-01 keys=["forkClone","sources","targetId"]
+[2026-10-30T17:27:06.224Z] forkClone：用 sessions.fork 克隆 session-14afce5f-7138-4b85-91f5-90224a0d5401
+[2026-10-30T17:27:08.832Z] resume ok
+[2026-10-30T17:27:12.520Z] fork 返回: test-fork-01
+[2026-10-30T17:27:13.393Z] persistence.create ok, inheritedEventCount=49513
+[2026-10-30T17:27:13.394Z] 准备 append 49514 条 seed 事件
+[2026-10-30T17:27:19.521Z] seed 落盘完成
+[2026-10-30T17:27:19.603Z] resume 已释放
+[2026-10-30T17:27:32.321Z] execute targetId=test-full-01 keys=["fullCopy","sources","targetId"]
+[2026-10-30T17:27:32.719Z] fullCopy：多源全类型复制，1 个源
+[2026-10-30T17:27:33.749Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:27:33.995Z] [full] session-14afce5f-7138-4b85-91f5-90224a0d5401：块 1310，保留 1310，去重跳过 0，候选 47267
+[2026-10-30T17:27:33.996Z] fullCopy 生成 47233 条，清噪音 46，删空思考块 2546，丢工具 0，跳过 {"agent/inbox/spliced":2041,"request/context":1,"session/title":7,"session/title-llm-request":1,"session/end-seed":88,"approval/asked":1,"approval/decided":1,"command/run":6,"command/done":6,"compaction/prune":35,"compaction/start":9,"compaction/summary":9,"compaction/end":9,"assistant/attempt":8,"llm/retry":2,"llm/retry-started":2,"todo/write":2,"（重复的 result 修正条）":35,"（replace 降级为 append）":40}
+[2026-10-30T17:27:36.317Z] fullCopy append+flush ok
+[2026-10-30T17:28:02.535Z] execute targetId=test-full-01 keys=["verify","targetId"]
+[2026-10-30T17:28:14.367Z] execute targetId=test-mix-01 keys=["mixCopy","sources","targetId","timeFrom"]
+[2026-10-30T17:28:14.718Z] mixCopy：按时间混合 1 个源
+[2026-10-30T17:28:15.747Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:28:15.786Z] [mix] 候选块 1310，时间窗内 1310
+[2026-10-30T17:28:16.032Z] [mix] 生成 47069 条，turn 1310，清噪音 46，丢工具 0，字节 22.04MB，已到末尾
+[2026-10-30T17:28:18.252Z] mix append+flush ok
+[2026-10-30T17:28:44.693Z] execute targetId=test-seq-01 keys=["copySequential","sources","targetId"]
+[2026-10-30T17:28:45.070Z] copySequential：单源直线复制
+[2026-10-30T17:28:46.040Z] [reader] session-14afce5f-7138-4b85-91f5-90224a0d5401 -> 49514 事件，遮蔽 13983，保留 49514
+[2026-10-30T17:28:46.315Z] copySequential 完成：49496 条事件，1310 turn，44 压缩记录
+[2026-10-30T17:28:46.359Z] 预检失败 3 条: compaction/start 在 turn 外（DSH 要求落在打开着的 turn 内） | compaction/start 在 turn 外（DSH 要求落在打开着的 turn 内） | compaction/start 在 turn 外（DSH 要求落在打开着的 turn 内）
+[2026-10-30T17:29:17.830Z] execute targetId=test-fork-01 keys=["resumeOnly","targetId"]
+[2026-10-30T17:29:17.831Z] resumeOnly：test-fork-01
+[2026-10-30T17:29:18.931Z] resumeOnly 失败: Error session "test-fork-01" already exists

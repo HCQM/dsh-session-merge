@@ -62,6 +62,7 @@ function decompressAllFrames(buf) {
 
 /** 读一个会话的 header（只为拿 cwd，不解析事件）。 */
 function readSessionHeader(sessionId) {
+  if (!sessionId) return null;
   let dirs = [];
   try { dirs = fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true }).filter((d) => d.isDirectory()); } catch { return null; }
   for (const d of dirs) {
@@ -87,11 +88,13 @@ function readSessionHeader(sessionId) {
 
 /** 合并时默认跟着源会话的工作区，避免落到 DSH 的启动目录。 */
 function firstSourceCwd(sourceId) {
+  if (!sourceId) return null;
   const h = readSessionHeader(sourceId);
   return h && typeof h.cwd === 'string' && h.cwd ? h.cwd : null;
 }
 
 function readSessionEvents(sessionId, includeShadowed = false) {
+  if (!sessionId) return null;
   let dirs = [];
   try { dirs = fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true }).filter((d) => d.isDirectory()); } catch { return null; }
 
@@ -214,8 +217,9 @@ export function apply(ctx) {
   ctx.effect(() => ctx.tools.register({
     name: 'session_merge_build',
     description:
-      'DSH 会话合并/追加工具。模式：inspect=查看结构（只读）；fullCopy=多源全类型复制（保留压缩节点）；' +
-      'mixCopy=按时间窗混合；foldTarget=折叠早期 surface；fromJsonl=按区间写本地 JSONL（自动补 turn 边界、自动 seq 偏移）；' +
+
+      'DSH 会话合并/追加工具。模式：inspect=查看结构（只读）；verify=官方 open 校验；planCompact=计算可压缩切点（只读）；' +
+      'fullCopy=多源全类型复制（保留压缩节点）；mixCopy=按时间窗混合；fromJsonl=按区间写本地 JSONL（自动补 turn 边界、自动 seq 偏移）；' +
       'forkClone=官方 fork 克隆；copySequential=单源直线复制；resumeOnly=只 resume 触发落盘。' +
       '安全线：surface ≤ 3.4MB（约 900K tokens），超了 /compact 会报超限。',
     parameters: {
@@ -251,9 +255,10 @@ export function apply(ctx) {
         timeUntil: { type: 'number', description: 'mixCopy 结束时间戳（毫秒，不含）' },
         byteBudget: { type: 'number', description: 'mixCopy 单批 surface 字节预算，到量就在 turn 边界停，返回 nextFrom' },
         seqUntil: { type: 'number', description: 'fullCopy 取源事件 seq 上限（含），用于把压缩段截断在压缩节点覆盖范围内' },
-        foldTarget: { type: 'boolean', description: '折叠目标会话已有的早期 surface（只追加一条 replace）' },
-        foldBudgetBytes: { type: 'number', description: 'foldTarget 保留的 surface 文本字节预算，默认 2700000' },
-        foldSkip: { type: 'number', description: 'foldTarget 跳过开头 N 条 surface（避开已有压缩节点覆盖区）' },
+        planCompact: { type: 'boolean', description: '只读计算可压缩切点：按 turn/end 边界切出每段 ≤ 预算的位置，避开已有压缩记录；原始事件一条不动' },
+        compactBudgetBytes: { type: 'number', description: 'planCompact 每段 surface 字节预算，默认 3000000（≈790K tokens）' },
+        makeRoot: { type: 'boolean', description: '把会话改造成合法根：isSeeded=false、删 parentSession、inherited:true 改 false、delivery 指向新 id（用来修断链会话）' },
+        sourceId: { type: 'string', description: 'makeRoot 的源会话 id（也可用 sources[0]）' },
       },
       required: [],
       additionalProperties: false,
@@ -266,14 +271,18 @@ export function apply(ctx) {
       const now = Date.now();
       // args 在 DSH 里是冻结的，不能原地改；统一用局部变量
       const targetId = args.targetId || ('session-' + randomUUID());
-      log('execute targetId=' + targetId + ' copySequential=' + args.copySequential + ' seqFrom=' + args.seqFrom + ' seqUntil=' + args.seqUntil);
+      log('execute targetId=' + targetId + ' keys=' + JSON.stringify(Object.keys(args).filter((k) => args[k] !== undefined)));
 
       const persistence = ctx.get('sessionPersistence');
       if (!persistence || typeof persistence.create !== 'function') {
         return { ok: false, error: '拿不到 sessionPersistence' };
       }
       const sources = Array.isArray(args.sources) ? args.sources : [];
-      if (!sources.length && args.inspect !== true && !args.fromJsonl) return { ok: false, error: 'sources 为空' };
+      // 只靠 targetId 就能跑的模式：inspect / verify / planCompact / makeRoot / fromJsonl / resumeOnly
+      const needsSources = !args.inspect && !args.verify && !args.planCompact && !args.makeRoot && !args.fromJsonl && !args.resumeOnly;
+      if (!sources.length && needsSources) {
+        return { ok: false, error: 'sources 为空（inspect / verify / planCompact / makeRoot / fromJsonl / resumeOnly 可只传 targetId）' };
+      }
 
       const header = {
         id: targetId,
@@ -746,106 +755,213 @@ export function apply(ctx) {
         }
         return { ok: true, mode: 'mixCopy', events: out2.length, turns: t2 - baseTurn, nextFrom };
       }
-
-      // ============ 模式：折叠既有会话的早期 surface ============
-      if (args.foldTarget === true) {
-        log('foldTarget：' + targetId);
-        const st8 = await persistence.stat(targetId).catch(() => null);
-        if (!st8) return { ok: false, error: '目标不存在' };
-        let h8 = null;
-        try {
-          h8 = await persistence.open(targetId, 'write');
-          const all = await h8.read(0);
-          const evs = all?.events || [];
-          const budget = Number(args.foldBudgetBytes) || 2700000;
-          const SURF = new Set(['user/message', 'assistant/message', 'tool/result']);
-          const surface = [];
-          for (const e of evs) {
-            if (!SURF.has(e.type)) continue;
-            if (e.surfaceOp === 'append') surface.push(e.seq);
-            else if (e.surfaceOp && typeof e.surfaceOp === 'object') {
-              const a = surface.indexOf(e.surfaceOp.startSeq);
-              const b = surface.indexOf(e.surfaceOp.endSeq);
-              if (a >= 0 && b >= a) surface.splice(a, b - a + 1, e.seq);
-            }
-          }
-          const bySeq = new Map(evs.map((e) => [e.seq, e]));
-          const sizeOf = (seq) => {
-            const e = bySeq.get(seq);
-            if (!e) return 0;
-            let sz = JSON.stringify(e.data).length;
-            if (Array.isArray(e.data?.stream)) sz -= JSON.stringify(e.data.stream).length;
-            return sz;
-          };
-          let acc = 0;
-          let cutIdx = 0;
-          for (let i = surface.length - 1; i >= 0; i--) {
-            acc += sizeOf(surface[i]);
-            if (acc > budget) { cutIdx = i + 1; break; }
-          }
-          const skip = Math.max(0, Number(args.foldSkip) || 0);
-          if (cutIdx <= skip) {
-            return { ok: true, mode: 'foldTarget', folded: 0, note: cutIdx <= 0 ? '已在预算内' : 'foldSkip 太大', surfaceCount: surface.length };
-          }
-          const fromSeq = surface[skip];
-          const toSeq = surface[cutIdx - 1];
-          const lastEv = evs[evs.length - 1];
-          const ev = {
-            seq: (typeof lastEv?.seq === 'number' ? lastEv.seq : -1) + 1,
-            time: (lastEv?.time ?? now) + 1,
-            type: 'user/message',
-            data: {
-              content: [{ type: 'text', text: `（第 ${skip + 1}~${cutIdx} 条历史已折叠为压缩视图；原始记录完整保存在本会话事件日志中，可检索）` }],
-              source: { kind: 'user', rpcId: randomUUID(), clientTimeZone: 'Asia/Shanghai' },
-              role: 'user',
-              id: randomUUID(),
-            },
-            surfaceOp: { op: 'replace', startSeq: fromSeq, endSeq: toSeq },
-          };
-          if (args.dryRun === true) {
-            log('foldTarget dryRun：将折叠 ' + (cutIdx - skip) + ' 条');
-            return {
-              ok: true, dryRun: true, mode: 'foldTarget',
-              willFold: cutIdx - skip, surfaceCount: surface.length,
-              remainAfter: surface.length - (cutIdx - skip) + 1,
-            };
-          }
-          await h8.append([ev]);
-          await h8.flush();
-          log('foldTarget 折叠 surface[' + skip + '..' + (cutIdx - 1) + ']');
-          return { ok: true, mode: 'foldTarget', folded: cutIdx - skip, remaining: surface.length - (cutIdx - skip) + 1 };
-        } catch (err) {
-          log('foldTarget 失败: ' + (err?.message ?? err));
-          return fail('write', err?.message ?? err);
-        } finally {
-          try { if (h8) await h8.close(); } catch { /* 忽略 */ }
-        }
-      }
-
-      // ============ 模式：官方校验（调 DSH 自己的 open，报错原样透传）============
-      if (args.verify === true) {
-        const id = args.targetId || sources[0];
-        if (!id) return { ok: false, error: '需要 targetId 或 sources[0]' };
+      // ============ 模式：官方校验（只读，单独调用）============
+      if (args.verify === true && args.inspect !== true) {
+        const vid = args.targetId || sources[0];
+        if (!vid) return { ok: false, error: '需要 targetId' };
         let hv = null;
         try {
-          hv = await persistence.open(id, 'read');
+          hv = await persistence.open(vid, 'read');
           const cur = await hv.read(0);
-          const evs = cur?.events || [];
-          const head = cur?.header || evs.find((e) => e.type === 'session') || null;
-          log('[verify] ' + id + ' 打开成功，事件 ' + evs.length);
+          const evs2 = cur?.events || [];
+          log('[verify] ' + vid + ' 打开成功，事件 ' + evs2.length);
           return {
-            ok: true, mode: 'verify', id, events: evs.length, header: head,
-            note: '这是 DSH 自己的 open 路径：能打开 = DSH 认；报错文案与界面一字不差',
+            ok: true, mode: 'verify', id: vid, events: evs2.length,
+            header: (evs2[0] && evs2[0].type === 'session') ? evs2[0].data : null,
+            note: 'DSH 自己的 open 路径：能打开 = DSH 认；报错文案与界面一字不差',
           };
         } catch (err) {
-          log('[verify] ' + id + ' 打不开：' + (err?.name ?? '') + ' ' + (err?.message ?? err));
+          log('[verify] ' + vid + ' 打不开：' + (err?.name ?? '') + ' ' + (err?.message ?? err));
           return {
-            ok: false, mode: 'verify', id, stage: 'open',
+            ok: false, mode: 'verify', id: vid, stage: 'open',
             errorName: err?.name ?? null,
             error: String(err?.message ?? err),
           };
         } finally {
           try { if (hv) await hv.close(); } catch { /* 忽略 */ }
+        }
+      }
+
+
+      // ============ 模式：计算可压缩切点（只读，保证上下文完整）============
+      if (args.planCompact === true) {
+        log('[planCompact] 进入，targetId=' + args.targetId);
+        const id = args.targetId || sources[0];
+        if (!id) return { ok: false, error: '需要 targetId' };
+        log('[planCompact] 开始读会话 ' + id);
+        const evs = readSessionEvents(id, true);
+        log('[planCompact] 读到 ' + (evs ? evs.length : 'null'));
+        if (!evs || !evs.length) return { ok: false, error: '读不到会话 ' + id };
+        const SURF = new Set(['user/message', 'assistant/message', 'tool/result']);
+        // 重建当前 surface（与 DSH 一致的 append / replace 语义）
+        const surface = [];
+        for (const e of evs) {
+          if (!SURF.has(e.type)) continue;
+          if (e.surfaceOp === 'append') surface.push(e.seq);
+          else if (e.surfaceOp && typeof e.surfaceOp === 'object') {
+            const a = surface.indexOf(e.surfaceOp.startSeq);
+            const b = surface.indexOf(e.surfaceOp.endSeq);
+            if (a >= 0 && b >= a) surface.splice(a, b - a + 1, e.seq);
+          }
+        }
+        const bySeq = new Map(evs.map((e) => [e.seq, e]));
+        const sizeCache = new Map();
+        const sizeOf = (seq) => {
+          if (sizeCache.has(seq)) return sizeCache.get(seq);
+          const e = bySeq.get(seq);
+          let sz = 0;
+          if (e) {
+            sz = JSON.stringify(e.data || {}).length;
+            if (Array.isArray(e.data?.stream)) sz -= JSON.stringify(e.data.stream).length;
+          }
+          sizeCache.set(seq, sz);
+          return sz;
+        };
+        // 预算：默认 3.0MB ≈ 790K tokens（压得动），可用 compactBudgetBytes 覆盖
+        const budget = Number(args.compactBudgetBytes) || 3000000;
+        // 已有压缩记录覆盖的区间（用区间判断，不遍历 surface）
+        const shadowRanges = [];
+        for (const e of evs) {
+          if (e.type !== 'compaction/summary' && e.type !== 'compaction/prune') continue;
+          const r = e.data?.shadowedRange;
+          if (r && typeof r.start === 'number' && typeof r.end === 'number') shadowRanges.push([r.start, r.end]);
+        }
+        const isShadowed = (seq) => shadowRanges.some(([a, b]) => seq >= a && seq <= b);
+        // turn 号：从事件里拿（surface 事件本身带 data.turn）
+        const turnOf = new Map();
+        for (const e of evs) {
+          if (typeof e.seq === 'number' && typeof e.data?.turn === 'number') turnOf.set(e.seq, e.data.turn);
+        }
+        // 预先算好"每个可见 surface 事件的下一个可见 surface 事件"，用它判断 turn 边界
+        const visible = [];
+        for (let i = 0; i < surface.length; i++) if (!isShadowed(surface[i])) visible.push(i);
+        const nextVisibleTurn = new Map();
+        for (let k = 0; k < visible.length; k++) {
+          const curIdx = visible[k];
+          const nxtIdx = k + 1 < visible.length ? visible[k + 1] : -1;
+          const curTurn = turnOf.get(surface[curIdx]);
+          const nxtTurn = nxtIdx >= 0 ? turnOf.get(surface[nxtIdx]) : null;
+          nextVisibleTurn.set(curIdx, curTurn !== undefined && (nxtIdx < 0 || nxtTurn !== curTurn));
+        }
+        let acc = 0;
+        const cuts = [];
+        for (let i = 0; i < surface.length; i++) {
+          const seq = surface[i];
+          if (isShadowed(seq)) continue;
+          acc += sizeOf(seq);
+          // 只有在 turn 边界（该 turn 的最后一个可见 surface 事件）才允许下刀
+          if (acc >= budget && nextVisibleTurn.get(i) === true) {
+            cuts.push({
+              cutAfterSeq: seq,
+              surfaceIndex: i,
+              prefixMB: Number((acc / 1048576).toFixed(2)),
+              prefixTokens: Math.round(acc / 3.8),
+            });
+            acc = 0;
+          }
+        }
+        const tailBytes = acc;
+        let totalBytes = 0;
+        for (const q of surface) totalBytes += sizeOf(q);
+        log('[planCompact] ' + id + ' | surface ' + (totalBytes / 1048576).toFixed(2) + 'MB | 切点 ' + cuts.length);
+        return {
+          ok: true, mode: 'planCompact', id,
+          totalMB: Number((totalBytes / 1048576).toFixed(2)),
+          totalTokens: Math.round(totalBytes / 3.8),
+          budgetMB: Number((budget / 1048576).toFixed(2)),
+          budgetTokens: Math.round(budget / 3.8),
+          surfaceEvents: surface.length,
+          cuts,
+          tailMB: Number((tailBytes / 1048576).toFixed(2)),
+          tailTokens: Math.round(tailBytes / 3.8),
+          note: cuts.length
+            ? '按这些 cutAfterSeq 用 forkClone(forkBoundary) 切段，每段单独 /compact，最后用 fullCopy 拼回。原始事件一条不删。'
+            : 'surface 在预算内，直接 /compact 即可。'
+        };
+      }
+      // ============ 模式：把会话改造成合法根（摆脱 parentSession 断链）============
+      if (args.makeRoot === true) {
+        const srcId = args.sourceId || sources[0];
+        const dstId = args.targetId;
+        if (!srcId || !dstId) return { ok: false, error: 'makeRoot 需要 sourceId(或 sources[0]) 和 targetId' };
+        const evs = readSessionEvents(srcId, true);
+        if (!evs || !evs.length) return { ok: false, error: '读不到源会话 ' + srcId };
+        log('[makeRoot] 源事件 ' + evs.length + '，找 header');
+        const oldHeader = evs.find((e) => e.type === 'session') || null;
+        if (!oldHeader) return { ok: false, error: '源会话里没有 header' };
+        log('[makeRoot] header keys=' + JSON.stringify(Object.keys(oldHeader.data || {})));
+        // 新 header：isSeeded=false，删掉 parentSession（不能写 null，null 非法）
+        const hd = { ...(oldHeader.data || {}) };
+        hd.id = dstId;
+        hd.isSeeded = false;
+        delete hd.parentSession;
+        if (typeof args.cwd === 'string' && args.cwd) hd.cwd = args.cwd;
+        let cutCount = 0;
+        let deliveryFixed = 0;
+        const out = [];
+        let outSeq = 0;
+        const seqMap = new Map();
+        // 先建立 seq 映射（改造成根不增删事件，只改内容）
+        for (const e of evs) if (typeof e.seq === 'number') { seqMap.set(e.seq, outSeq); outSeq += 1; }
+        let h = null;
+        try {
+          log('[makeRoot] create ' + dstId);
+          h = await persistence.create({ ...hd, type: 'session' });
+          log('[makeRoot] create ok');
+        } catch (err) {
+          log('[makeRoot] create 失败: ' + (err?.message ?? err));
+          return fail('write', '建新会话失败: ' + (err?.message ?? err));
+        }
+        try {
+          for (const e of evs) {
+            if (!e || !e.type || e.type === 'session') continue;
+            const data = JSON.parse(JSON.stringify(e.data || {}));
+            // 3. 继承标记：所有 inherited:true 的 end-seed 改成 false
+            if (e.type === 'session/end-seed' && data.inherited === true) {
+              data.inherited = false;
+              cutCount += 1;
+            }
+            // 4. delivery：指向旧会话的 marker 改成新 id
+            if (data && typeof data.sessionId === 'string' && data.sessionId === srcId) {
+              data.sessionId = dstId;
+              deliveryFixed += 1;
+            }
+            if (data && data.delivery && typeof data.delivery === 'object') {
+              if (data.delivery.sessionId === srcId) { data.delivery.sessionId = dstId; deliveryFixed += 1; }
+            }
+            const ev = {
+              seq: seqMap.get(e.seq),
+              time: typeof e.time === 'number' ? e.time : Date.now(),
+              type: e.type,
+              data,
+            };
+            if (e.surfaceOp !== undefined) ev.surfaceOp = e.surfaceOp;
+            if (e.ignorable === true) ev.ignorable = true;
+            if (Array.isArray(e.sourceEventSeqs)) {
+              const mapped = [...new Set(e.sourceEventSeqs.map((x) => seqMap.get(x)).filter((x) => typeof x === 'number' && x < ev.seq))];
+              if (mapped.length) ev.sourceEventSeqs = mapped;
+            }
+            out.push(ev);
+          }
+          const probs = validateEventsFull(out, 1);
+          const hdrProbs = validateHeader({ ...hd, type: 'session' });
+          log('[makeRoot] 生成 ' + out.length + ' 条 | 校验问题 ' + probs.length + ' / header 问题 ' + hdrProbs.length);
+          if (probs.length || hdrProbs.length) {
+            log('[makeRoot] 预检失败样例: ' + [...hdrProbs, ...probs].slice(0, 3).join(' | '));
+            return { ok: false, stage: 'precheck', problems: [...hdrProbs, ...probs].slice(0, 20) };
+          }
+          await h.append(out);
+          await h.flush();
+          log('[makeRoot] ' + srcId + ' -> ' + dstId + ' | 事件 ' + out.length + ' | 解继承 ' + cutCount + ' | 修 delivery ' + deliveryFixed);
+          return {
+            ok: true, mode: 'makeRoot', from: srcId, to: dstId,
+            events: out.length, clearedInherited: cutCount, deliveryFixed,
+            note: '新会话 isSeeded=false、无 parentSession、继承标记已清；用 verify 确认能打开',
+          };
+        } catch (err) {
+          return fail('write', err?.message ?? err);
+        } finally {
+          try { if (h) await h.close(); } catch { /* 忽略 */ }
         }
       }
 
@@ -1185,7 +1301,7 @@ export function apply(ctx) {
       }
 
       // 没有匹配到任何模式
-      return { ok: false, error: '未指定模式：inspect / verify / forkClone / fullCopy / mixCopy / foldTarget / fromJsonl / copySequential / resumeOnly 之一' };
+      return { ok: false, error: '未指定模式：inspect / verify / planCompact / forkClone / fullCopy / mixCopy / fromJsonl / copySequential / resumeOnly 之一' };
     },
   }), 'dsh-session-merge: merge tool');
 
@@ -1204,8 +1320,11 @@ export function apply(ctx) {
       render: (value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
     },
     async execute(args = {}) {
-      log('unlock 调用 targetId=' + targetId + ' action=' + args.action);
-      const out = { targetId: targetId };
+      // 这是独立工具的 execute，作用域里没有外层 targetId
+      const uid = args.targetId;
+      if (!uid) return { ok: false, error: '需要 targetId' };
+      log('unlock 调用 targetId=' + uid + ' action=' + args.action);
+      const out = { targetId: uid };
       const persistence = ctx.get('sessionPersistence');
       if (!persistence) return { error: '拿不到 sessionPersistence' };
       try {
@@ -1242,10 +1361,11 @@ export function apply(ctx) {
         }
       }
       try {
-        const st = await persistence.stat(targetId);
+        const st = await persistence.stat(uid);
         let s = JSON.stringify(st);
         out.statPreview = s.length > 1200 ? s.slice(0, 1200) + '…' : s;
       } catch (err) { out.statErr = String(err?.message ?? err); }
+      out.ok = true;
       return out;
     },
   }), 'dsh-session-merge: unlock tool');
