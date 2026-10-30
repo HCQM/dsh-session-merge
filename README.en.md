@@ -1,6 +1,7 @@
 # 🔀 dsh-session-merge — merge and append DSH sessions
 
-[![version](https://img.shields.io/badge/version-0.5.0-blue)](./CHANGELOG.md)
+[![npm version](https://img.shields.io/npm/v/dsh-session-merge?label=npm&color=blue)](https://www.npmjs.com/package/dsh-session-merge)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-session-merge?label=monthly%20downloads&color=brightgreen)](https://www.npmjs.com/package/dsh-session-merge)
 [![license](https://img.shields.io/badge/license-MIT-orange)](./LICENSE)
 [![stars](https://img.shields.io/github/stars/HCQM/dsh-session-merge?style=flat)](https://github.com/HCQM/dsh-session-merge/stargazers)
 [![issues](https://img.shields.io/github/issues/HCQM/dsh-session-merge)](https://github.com/HCQM/dsh-session-merge/issues)

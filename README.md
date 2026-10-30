@@ -1,6 +1,7 @@
 # 🔀 dsh-session-merge — 合并、追加 DSH 会话
 
-[![version](https://img.shields.io/badge/version-0.5.0-blue)](./CHANGELOG.md)
+[![npm version](https://img.shields.io/npm/v/dsh-session-merge?label=npm&color=blue)](https://www.npmjs.com/package/dsh-session-merge)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-session-merge?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen)](https://www.npmjs.com/package/dsh-session-merge)
 [![license](https://img.shields.io/badge/license-MIT-orange)](./LICENSE)
 [![stars](https://img.shields.io/github/stars/HCQM/dsh-session-merge?style=flat)](https://github.com/HCQM/dsh-session-merge/stargazers)
 [![issues](https://img.shields.io/github/issues/HCQM/dsh-session-merge)](https://github.com/HCQM/dsh-session-merge/issues)
