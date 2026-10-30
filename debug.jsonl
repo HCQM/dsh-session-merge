@@ -1,0 +1,93 @@
+{"t":"2026-10-29T15:59:30.707Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-29T15:59:30.711Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-29T16:00:05.444Z","msg":"execute targetId=session-progress-test copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:00:05.445Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:00:05.526Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 2844"}
+{"t":"2026-10-29T16:00:05.528Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:00:08.840Z","msg":"execute targetId=session-progress-test copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:00:08.841Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:00:08.937Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 4372"}
+{"t":"2026-10-29T16:00:08.940Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:00:09.002Z","msg":"create 模式"}
+{"t":"2026-10-29T16:00:09.077Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 2844"}
+{"t":"2026-10-29T16:00:09.079Z","msg":"预检失败 1 条: system/message 缺 producer-owned source（seq 5）"}
+{"t":"2026-10-29T16:01:17.410Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-29T16:01:17.413Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-29T16:02:05.962Z","msg":"execute targetId=session-progress-test copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:02:05.964Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:02:06.030Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 4372"}
+{"t":"2026-10-29T16:02:06.032Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:02:06.085Z","msg":"create 模式"}
+{"t":"2026-10-29T16:02:06.165Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 2844"}
+{"t":"2026-10-29T16:02:06.168Z","msg":"预检失败 1 条: system/message 缺 producer-owned source（seq 5）"}
+{"t":"2026-10-29T16:02:26.848Z","msg":"execute targetId=session-83532f73-6839-4c52-8bbd-8411a6e85742 copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:03:21.475Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-29T16:03:21.478Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-29T16:03:59.428Z","msg":"execute targetId=session-ac05a070-eb03-447b-9f9e-f6dc3dd19b10 copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:05:55.727Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-29T16:05:55.730Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-29T16:06:26.480Z","msg":"execute targetId=session-progress-test copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:06:26.481Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:06:26.537Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 4372"}
+{"t":"2026-10-29T16:06:26.539Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:06:26.613Z","msg":"create 模式"}
+{"t":"2026-10-29T16:06:26.679Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4372 事件，遮蔽 1528，保留 2844"}
+{"t":"2026-10-29T16:06:26.681Z","msg":"预检通过 37 条，清理思考噪音 0 块，删除空思考块 0 个"}
+{"t":"2026-10-29T16:06:26.699Z","msg":"append+flush ok"}
+{"t":"2026-10-29T16:08:37.755Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-29T16:08:37.758Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-29T16:09:20.295Z","msg":"execute targetId=session-progress-test copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:09:20.296Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:09:20.356Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4391 事件，遮蔽 1528，保留 4391"}
+{"t":"2026-10-29T16:09:20.359Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:09:20.435Z","msg":"append 模式：现有 37 条，最大 turn=5"}
+{"t":"2026-10-29T16:09:20.518Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4391 事件，遮蔽 1528，保留 2863"}
+{"t":"2026-10-29T16:09:20.520Z","msg":"预检通过 37 条，清理思考噪音 0 块，删除空思考块 0 个"}
+{"t":"2026-10-29T16:09:20.528Z","msg":"append+flush ok"}
+{"t":"2026-10-29T16:09:42.317Z","msg":"execute targetId=session-progress-test2 copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:09:42.319Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:09:42.380Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4391 事件，遮蔽 1528，保留 4391"}
+{"t":"2026-10-29T16:09:42.382Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:09:42.483Z","msg":"create 模式"}
+{"t":"2026-10-29T16:09:42.574Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4391 事件，遮蔽 1528，保留 2863"}
+{"t":"2026-10-29T16:09:42.576Z","msg":"预检通过 37 条，清理思考噪音 0 块，删除空思考块 0 个"}
+{"t":"2026-10-29T16:09:42.590Z","msg":"append+flush ok"}
+{"t":"2026-10-29T16:11:00.541Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-29T16:11:00.544Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-29T16:11:27.229Z","msg":"execute targetId=session-progress-test3 copySequential=undefined seqFrom=undefined seqUntil=undefined"}
+{"t":"2026-10-29T16:11:27.230Z","msg":"merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）"}
+{"t":"2026-10-29T16:11:27.291Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4391 事件，遮蔽 1528，保留 4391"}
+{"t":"2026-10-29T16:11:27.293Z","msg":"合并 5 个 turn 块"}
+{"t":"2026-10-29T16:11:27.375Z","msg":"create 模式"}
+{"t":"2026-10-29T16:11:27.439Z","msg":"[reader] session-748dc8ea-0b79-46aa-9145-aff71d5717c3 -> 4391 事件，遮蔽 1528，保留 2863"}
+{"t":"2026-10-29T16:11:27.441Z","msg":"预检通过 37 条，清理思考噪音 0 块，删除空思考块 0 个"}
+{"t":"2026-10-29T16:11:27.466Z","msg":"append+flush ok"}
+{"t":"2026-10-29T16:11:27.467Z","msg":"[progress] 本段 5/342，下一段 skip=5，剩 337，surface 0.01MB ≈ 2419 tokens，shouldCompact=false"}
+{"t":"2026-10-30T11:27:30.962Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T11:27:30.966Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T11:36:46.895Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T11:36:46.898Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T12:15:25.328Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T12:15:25.331Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T12:20:43.646Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T12:20:43.649Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T14:04:08.156Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T14:04:08.159Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T15:31:52.371Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T15:31:52.373Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T15:38:50.899Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T15:38:50.902Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T15:42:35.910Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T15:42:35.914Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T15:56:12.305Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T15:56:12.310Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T16:24:37.878Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T16:24:37.881Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T16:26:34.973Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T16:26:34.976Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T16:34:16.702Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T16:34:16.706Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T16:36:42.832Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T16:36:42.837Z","msg":"apply 结束（v11）"}
+{"t":"2026-10-30T16:39:57.915Z","msg":"apply 开始（v10）"}
+{"t":"2026-10-30T16:39:57.917Z","msg":"apply 结束（v11）"}

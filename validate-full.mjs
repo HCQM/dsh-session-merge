@@ -1,5 +1,31 @@
 // 按 packages/session/session-format-v3-to-v4/src/relationships.ts 的规则实现的完整校验器
 // 用于写盘前自检，覆盖 turn/step/tool/surface/developer/title/command/compaction
+// 另含两项来自独立校验器（session-validator/index.mjs）的规则：header 字段校验、seq 连续性
+
+// header 必需/可选字段（对齐 DSH 的 assertReleasedV4Header）
+const HEADER_REQUIRED = ['type', 'version', 'id', 'createdAt', 'isSeeded', 'delegationDepth']
+const HEADER_OPTIONAL = ['cwd', 'parentSession', 'origin', 'agentPreset']
+
+/**
+ * 校验会话 header（写入前对插件自造的 header 做形状检查）
+ * type 由 DSH 落盘时补，create() 参数里通常没有；有就必须是 session
+ * @param {object} header
+ * @returns {string[]} 问题列表，空数组表示通过
+ */
+export function validateHeader(header) {
+  const problems = []
+  if (!header || typeof header !== 'object') return ['header 不是对象']
+  if (header.type !== undefined && header.type !== 'session') problems.push('header.type 必须是 "session"')
+  if (header.version !== 4) problems.push('header.version 必须是 4')
+  for (const k of HEADER_REQUIRED) {
+    if (k !== 'type' && !(k in header)) problems.push('header 缺必需字段 ' + k)
+  }
+  for (const k of Object.keys(header)) {
+    if (!HEADER_REQUIRED.includes(k) && !HEADER_OPTIONAL.includes(k)) problems.push('header 多出未知字段 ' + k)
+  }
+  if ('parentSession' in header && header.parentSession === null) problems.push('parentSession 不能写 null（直接删掉该字段）')
+  return problems
+}
 
 export function validateEventsFull(events, startTurn = 1, opts = {}) {
   const problems = []
@@ -8,6 +34,7 @@ export function validateEventsFull(events, startTurn = 1, opts = {}) {
   let step = null
   let nextStep = 1
   const tools = new Map()
+  let prevSeq = null
   const surface = []            // surface 上的 seq 列表
   let protectedHead = null
   const commands = new Set()
@@ -20,7 +47,12 @@ export function validateEventsFull(events, startTurn = 1, opts = {}) {
 
   for (const e of events) {
     if (!e || !e.type || e.type === 'session') continue
-    if (typeof e.seq === 'number') seen.set(e.seq, e)
+    if (typeof e.seq === 'number') {
+      seen.set(e.seq, e)
+      // seq 必须严格 +1 递增（对齐独立校验器的「稠密」规则）
+      if (prevSeq !== null && e.seq !== prevSeq + 1) fail(`seq 不连续（${prevSeq} → ${e.seq}）`)
+      prevSeq = e.seq
+    }
     const d = e.data || {}
 
     // ==== DSH 真实会拦的字段级规则（提前在本地拦住）====

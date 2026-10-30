@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-merge",
-  "version": "0.2.0",
-  "description": "DSH 会话合并/追加工具：官方 fork 克隆、多源全类型复制、按时间窗混合、折叠 surface、按 JSONL 区间写入，全部走 sessionPersistence 落盘。",
+  "version": "0.3.0",
+  "description": "DSH 会话合并/追加：fork 克隆、全类型复制、时间窗混合、surface 折叠、JSONL 区间写入；三层校验（本地预检 / 六层深度 / 官方 open）。实测 DSH 桌面端 0.2.1-rc.5。",
   "license": "MIT",
   "author": "HCQM",
   "repository": {
@@ -19,9 +19,13 @@
   "files": [
     "index.js",
     "validate-full.mjs",
+    "deep-validate.mjs",
+    "bin",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "README.en.md",
+    "LICENSE",
+    "session-merge-runbook.md"
   ],
   "keywords": [
     "deepseek-harness",
@@ -29,23 +33,27 @@
     "dsh-plugin",
     "session",
     "merge",
-    "context"
+    "context",
+    "validator"
   ],
   "dsh": {
     "id": "dsh-session-merge",
     "name": "会话合并",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "permissions": "读取会话列表与事件；写入、折叠、克隆会话",
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh": ">=0.2.0-rc.1 <0.3.0-0"
+    "@deepseek-ai/dsh": ">=0.2.1-rc.5 <0.3.0-0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh": {
       "optional": true
     }
+  },
+  "bin": {
+    "dsh-session-validate": "./bin/validate.mjs"
   }
 }

@@ -19,7 +19,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { validateEventsFull } from './validate-full.mjs';
+import { validateEventsFull, validateHeader } from './validate-full.mjs';
 
 export const name = 'dsh-session-merge';
 export const inject = ['tools'];
@@ -240,6 +240,7 @@ export function apply(ctx) {
         dropEmptyReasoning: { type: 'boolean', description: 'true=删除内容为空的 reasoning 块（空转留存物）' },
         dryRun: { type: 'boolean', description: '只算不写：报告这批的事件数/turn/surface' },
         inspect: { type: 'boolean', description: '只读查看会话结构：事件数、turn、surface 体积、压缩节点、时间范围、类型分布' },
+        verify: { type: 'boolean', description: '官方校验：调 DSH 自己的 persistence.open 试读，能打开=DSH 认，报错文案与界面一致' },
         fromJsonl: { type: 'string', description: '从本地 JSONL 按区间写入（自动补 turn 边界、自动 seq 偏移，压缩后也能续写）' },
         jsonlFrom: { type: 'number', description: 'fromJsonl 起始行号（0 基，含）' },
         jsonlUntil: { type: 'number', description: 'fromJsonl 结束行号（不含）' },
@@ -286,6 +287,12 @@ export function apply(ctx) {
         delegationDepth: 0,
         agentPreset: 'standard',
       };
+      // header 形状先过一遍（对齐 DSH 的 assertReleasedV4Header）
+      const headerProbs = validateHeader(header);
+      if (headerProbs.length) {
+        log('header 预检失败: ' + headerProbs.slice(0, 3).join(' | '));
+        return { ok: false, stage: 'header', problems: headerProbs };
+      }
 
       // ============ 模式 -1：只 resume 触发落盘 ============
       if (args.resumeOnly === true) {
@@ -799,6 +806,33 @@ export function apply(ctx) {
           return fail('write', err?.message ?? err);
         } finally {
           try { if (h8) await h8.close(); } catch { /* 忽略 */ }
+        }
+      }
+
+      // ============ 模式：官方校验（调 DSH 自己的 open，报错原样透传）============
+      if (args.verify === true) {
+        const id = args.targetId || sources[0];
+        if (!id) return { ok: false, error: '需要 targetId 或 sources[0]' };
+        let hv = null;
+        try {
+          hv = await persistence.open(id, 'read');
+          const cur = await hv.read(0);
+          const evs = cur?.events || [];
+          const head = cur?.header || evs.find((e) => e.type === 'session') || null;
+          log('[verify] ' + id + ' 打开成功，事件 ' + evs.length);
+          return {
+            ok: true, mode: 'verify', id, events: evs.length, header: head,
+            note: '这是 DSH 自己的 open 路径：能打开 = DSH 认；报错文案与界面一字不差',
+          };
+        } catch (err) {
+          log('[verify] ' + id + ' 打不开：' + (err?.name ?? '') + ' ' + (err?.message ?? err));
+          return {
+            ok: false, mode: 'verify', id, stage: 'open',
+            errorName: err?.name ?? null,
+            error: String(err?.message ?? err),
+          };
+        } finally {
+          try { if (hv) await hv.close(); } catch { /* 忽略 */ }
         }
       }
 
