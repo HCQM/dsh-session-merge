@@ -296,6 +296,11 @@ export function apply(ctx) {
 
       // ============ 模式 -1：只 resume 触发落盘 ============
       if (args.resumeOnly === true) {
+        if (args.dryRun === true) {
+          const st = await persistence.stat(targetId).catch(() => null);
+          log('resumeOnly dryRun：目标存在=' + !!st);
+          return { ok: true, dryRun: true, mode: 'resumeOnly', targetId, targetExists: !!st };
+        }
         const agents = ctx.get('agents');
         if (!agents || typeof agents.resume !== 'function') return { ok: false, error: '拿不到 agents' };
         let h = null;
@@ -797,6 +802,14 @@ export function apply(ctx) {
             },
             surfaceOp: { op: 'replace', startSeq: fromSeq, endSeq: toSeq },
           };
+          if (args.dryRun === true) {
+            log('foldTarget dryRun：将折叠 ' + (cutIdx - skip) + ' 条');
+            return {
+              ok: true, dryRun: true, mode: 'foldTarget',
+              willFold: cutIdx - skip, surfaceCount: surface.length,
+              remainAfter: surface.length - (cutIdx - skip) + 1,
+            };
+          }
           await h8.append([ev]);
           await h8.flush();
           log('foldTarget 折叠 surface[' + skip + '..' + (cutIdx - 1) + ']');
@@ -870,8 +883,21 @@ export function apply(ctx) {
           timeRange: times.length ? [fmt(Math.min(...times)), fmt(Math.max(...times))] : null,
           types: c,
         };
+        // 带了 verify 就顺手做一次官方试开（一次调用同时拿到结构与可打开性）
+        if (args.verify === true) {
+          let hv = null;
+          try {
+            hv = await persistence.open(id, 'read');
+            info.verify = { ok: true, note: 'DSH 能打开' };
+          } catch (err) {
+            info.verify = { ok: false, errorName: err?.name ?? null, error: String(err?.message ?? err) };
+          } finally {
+            try { if (hv) await hv.close(); } catch { /* 忽略 */ }
+          }
+        }
         log('[inspect] ' + id + ' | 事件 ' + evs.length + ' | turn ' + info.turns +
-            ' | surface ' + info.surfaceMB + 'MB ≈ ' + info.approxTokens + ' tokens');
+            ' | surface ' + info.surfaceMB + 'MB ≈ ' + info.approxTokens + ' tokens' +
+            (info.verify ? ' | verify ' + (info.verify.ok ? '通过' : '失败') : ''));
         return info;
       }
 
@@ -930,8 +956,25 @@ export function apply(ctx) {
           }
           await h5.append(batch);
           await h5.flush();
-          log('jsonl append+flush ok，' + batch.length + ' 条 | turn ' + turnCount + ' | surface ' + (surfBytes2 / 1048576).toFixed(2) + 'MB');
-          return { ok: true, mode: 'fromJsonl', events: batch.length, turns: turnCount, surfaceMB: Number((surfBytes2 / 1048576).toFixed(2)), from, until };
+          const surfMB2 = Number((surfBytes2 / 1048576).toFixed(2));
+          log('jsonl append+flush ok，' + batch.length + ' 条 | turn ' + turnCount + ' | surface ' + surfMB2 + 'MB');
+          const remainingRows = Math.max(0, all.length - until);
+          return {
+            ok: true, mode: 'fromJsonl', events: batch.length, turns: turnCount,
+            surfaceMB: surfMB2, from, until,
+            progress: {
+              writtenRows: until,
+              totalRows: all.length,
+              remainingRows,
+              nextRange: remainingRows > 0 ? { jsonlFrom: until, jsonlUntil: Math.min(all.length, until + (until - from)) } : null,
+              shouldCompact: surfMB2 >= 2.4,
+            },
+            hint: remainingRows > 0
+              ? (surfMB2 >= 2.4
+                ? '这批 ' + surfMB2 + 'MB（约 ' + Math.round(surfBytes2 / 3.8 / 1000) + 'K tokens），到该压缩的线了：先在 GUI 里 /compact，再按 nextRange 继续。'
+                : '还剩 ' + remainingRows + ' 行未写，可直接按 nextRange 继续。')
+              : '全部写完了，最后压一次收尾。',
+          };
         } catch (err) {
           log('jsonl 写盘失败: ' + (err?.message ?? err));
           return fail('write', err?.message ?? err);
@@ -1141,228 +1184,8 @@ export function apply(ctx) {
         return { ok: true, mode: 'copySequential', targetId: targetId, events: out.length, turns: newTurn, compactions: compactionCount };
       }
 
-      // ============ 模式二：多源按 turn 块合并（deprecated，用 fullCopy 代替）============
-      log('merge 模式：按 turn 块合并（deprecated：不保留压缩记录，surface 会膨胀，建议改用 fullCopy）');
-      const limit = Math.min(Math.max(Number(args.limit) || 120, 1), 5000);
-      const allBlocks = [];
-      const stats = [];
-
-      for (const sid of sources) {
-        let events = readSessionEvents(sid, args.includeShadowed === true);
-        if (!events) { stats.push({ id: sid, ok: false }); continue; }
-
-        // seqFrom/seqUntil 只作用于第一个源：第二个源（会话2）的 seq 是独立编号，
-        // 混用会把它的内容整段过滤掉
-        const applySeq = sid === sources[0] && (typeof args.seqFrom === 'number' || typeof args.seqUntil === 'number');
-        if (applySeq) {
-          let lo = typeof args.seqFrom === 'number' ? args.seqFrom : -Infinity;
-          let hi = typeof args.seqUntil === 'number' ? args.seqUntil : Infinity;
-          if (lo !== -Infinity) {
-            const prevStarts = events.filter((e) => e.type === 'turn/start' && typeof e.seq === 'number' && e.seq <= lo);
-            if (prevStarts.length) lo = prevStarts[prevStarts.length - 1].seq;
-          }
-          if (hi !== Infinity) {
-            const nextEnds = events.filter((e) => e.type === 'turn/end' && typeof e.seq === 'number' && e.seq >= hi);
-            if (nextEnds.length) hi = nextEnds[0].seq;
-          }
-          events = events.filter((e) => typeof e.seq !== 'number' || (e.seq >= lo && e.seq <= hi));
-        }
-
-        let blocks = sliceTurns(events).filter((b) => b.events.some((x) =>
-          (x.type === 'user/message' && Array.isArray(x.data?.content)) ||
-          (x.type === 'assistant/message' && Array.isArray(x.data?.message?.content))));
-
-        if (typeof args.fromTime === 'number') blocks = blocks.filter((b) => typeof b.startTime !== 'number' || b.startTime >= args.fromTime);
-        if (typeof args.untilTime === 'number') blocks = blocks.filter((b) => typeof b.startTime !== 'number' || b.startTime < args.untilTime);
-
-        const skip = Math.max(0, Number(args.skip) || 0);
-        let taken;
-        if (args.fromStart) {
-          taken = blocks.slice(skip, Math.min(blocks.length, skip + limit));
-        } else {
-          const end = Math.max(0, blocks.length - skip);
-          taken = blocks.slice(Math.max(0, end - limit), end);
-        }
-        stats.push({ id: sid, turns: blocks.length, taken: taken.length });
-        allBlocks.push(...taken);
-      }
-
-      allBlocks.sort((a, b) => (a.startTime ?? Number.MAX_SAFE_INTEGER) - (b.startTime ?? Number.MAX_SAFE_INTEGER));
-      log('合并 ' + allBlocks.length + ' 个 turn 块');
-      if (args.dryRun) return { ok: true, dryRun: true, blocks: allBlocks.length, stats };
-
-      let handle = null;
-      let startSeq = 0;
-      let startTurn = 0;
-      let mode = 'create';
-      const stat = await persistence.stat(targetId).catch(() => null);
-      if (stat) {
-        mode = 'append';
-        handle = await persistence.open(targetId, 'write');
-        try {
-          const all = await handle.read(0);
-          const evs = all?.events || [];
-          startSeq = evs.length ? evs[evs.length - 1].seq + 1 : 0;
-          for (const e of evs) {
-            const v = e?.data?.turn;
-            if (typeof v === 'number' && v > startTurn) startTurn = v;
-          }
-        } catch (err) { log('读现有事件失败: ' + (err?.message ?? err)); }
-        log('append 模式：现有 ' + startSeq + ' 条，最大 turn=' + startTurn);
-      } else {
-        handle = await persistence.create(header);
-        log('create 模式');
-      }
-
-      const firstTimed = allBlocks.find((b) => typeof b.startTime === 'number');
-      const baseTime = firstTimed ? firstTimed.startTime - 1000 : now;
-
-      const out = [];
-      let seq = startSeq;
-      let newTurn = startTurn;
-      let systemInjected = false;
-
-      // 前置环境设置
-      const preEvents = (readSessionEvents(sources[0], false) || []).filter((e) => ['permission/preset', 'sandbox/mode', 'approval/policy'].includes(e.type));
-      let noiseStripped = 0;
-
-      let emptiedReasoning = 0;
-
-      let preIdx = 0;
-      for (const e of preEvents) {
-        out.push({ seq: seq++, time: baseTime + preIdx, type: e.type, data: { ...(e.data || {}) } });
-        preIdx += 1;
-      }
-
-      for (const block of allBlocks) {
-        newTurn += 1;
-        let stepOpen = false;
-        for (const e of block.events) {
-          if (!KEEP.has(e.type)) continue;
-          if (e.type === 'turn/end' && stepOpen) {
-            out.push({ seq: seq++, time: (out.length ? out[out.length - 1].time : now) + 1, type: 'step/end', data: { turn: newTurn, step: 1 } });
-            stepOpen = false;
-          }
-          const isFirstStepStart = e.type === 'step/start' && !systemInjected;
-          if (e.type === 'step/start') stepOpen = true;
-          if (e.type === 'step/end') stepOpen = false;
-          if (e.surfaceOp !== undefined && e.surfaceOp !== 'append') continue;
-          const data = { ...(e.data || {}) };
-          if (data.turn !== undefined) data.turn = newTurn;
-          if (e.type === 'assistant/message') {
-            if (!Array.isArray(data.stream)) data.stream = [];
-            if (!Array.isArray(data.message?.content)) continue;
-            if (args.stripNoise === true || args.dropEmptyReasoning === true) {
-              let removed = 0;
-              data.message = {
-                ...data.message,
-                content: data.message.content.map((b) => {
-                  if (!b || b.type !== 'reasoning' || typeof b.text !== 'string') return b;
-                  const cleaned = stripNoise(b.text);
-                  if (cleaned !== b.text) removed += 1;
-                  return { ...b, text: cleaned };
-                }).filter((b) => b && (b.type !== 'reasoning' || (typeof b.text === 'string' && b.text.trim().length > 0))),
-              };
-              if (removed) noiseStripped += removed;
-            }
-            if (args.dropEmptyReasoning === true) {
-              const before = data.message.content.length;
-              data.message = {
-                ...data.message,
-                content: data.message.content.filter((b) => !(b && b.type === 'reasoning' && !(b.text ?? '').trim().length)),
-              };
-              emptiedReasoning += before - data.message.content.length;
-            }
-          }
-          if (e.type === 'request/header') {
-            data.reason = out.some((x) => x.type === 'request/header') ? 'series' : 'initial';
-          }
-          let evTime = typeof e.time === 'number' ? e.time : now + seq;
-          const prevTime = out.length ? out[out.length - 1].time : 0;
-          if (evTime <= prevTime) evTime = prevTime + 1;
-          out.push({
-            seq: seq++,
-            time: evTime,
-            type: e.type,
-            data,
-            ...(e.surfaceOp ? { surfaceOp: e.surfaceOp } : {}),
-          });
-
-          if (isFirstStepStart) {
-            out.push({
-              seq: seq++,
-              time: (out.length ? out[out.length - 1].time : now) + 1,
-              type: 'system/message',
-              data: {
-                turn: newTurn,
-                step: data.step ?? 1,
-                message: {
-                  role: 'system',
-                  content: [{ type: 'text', text: '（合并会话：原始系统提示未取得）' }],
-                  source: { kind: 'system-prompt' },
-                  id: randomUUID(),
-                },
-              },
-              surfaceOp: 'append',
-            });
-            systemInjected = true;
-          }
-        }
-      }
-
-      out.push({ seq: seq++, time: (out.length ? out[out.length - 1].time : now) + 1, type: 'session/title', data: { title: '合并会话', messageSeqs: [], source: { kind: 'user' } } });
-
-      const problems = validateEventsFull(out, startTurn + 1, { isSeeded: true });
-      if (problems.length) {
-        log('预检失败 ' + problems.length + ' 条: ' + problems.slice(0, 5).join(' | '));
-        try { await handle.close(); } catch { /* 忽略 */ }
-        return { ok: false, stage: 'precheck', problems: problems.slice(0, 20), total: problems.length };
-      }
-      log('预检通过 ' + out.length + ' 条，清理思考噪音 ' + noiseStripped + ' 块，删除空思考块 ' + emptiedReasoning + ' 个');
-
-      try {
-        await handle.append(out);
-        await handle.flush();
-        log('append+flush ok');
-      } catch (err) {
-        log('写盘失败: ' + (err?.message ?? err));
-        try { await handle.close(); } catch { /* 忽略 */ }
-        return { ok: false, error: '写盘失败: ' + (err?.message ?? err) };
-      }
-      try { await handle.close(); } catch { /* 忽略 */ }
-      // 进度：告诉调用方下一段从哪开始、还剩多少、该不该先压缩
-      const totalTurns = stats.reduce((s, x) => s + (x.turns || 0), 0)
-      const takenTurns = stats.reduce((s, x) => s + (x.taken || 0), 0)
-      const nextSkip = (Number(args.skip) || 0) + takenTurns
-      const remaining = Math.max(0, totalTurns - nextSkip)
-      // 估算本次写进去的 surface 字节：assistant/user 文本 + tool/result 文本
-      let surfBytes = 0
-      for (const e of out) {
-        if (e.type !== 'user/message' && e.type !== 'assistant/message' && e.type !== 'tool/result') continue
-        const c = e.type === 'assistant/message' ? e.data?.message?.content : e.type === 'tool/result' ? e.data?.message?.content : e.data?.content
-        if (!Array.isArray(c)) continue
-        for (const b of c) if (b && typeof b.text === 'string') surfBytes += Buffer.byteLength(b.text, 'utf8')
-      }
-      const surfMB = Number((surfBytes / 1048576).toFixed(2))
-      const approxTokens = Math.round(surfBytes / 3.8)
-      log('[progress] 本段 ' + takenTurns + '/' + totalTurns + '，下一段 skip=' + nextSkip + '，剩 ' + remaining + '，surface ' + surfMB + 'MB ≈ ' + approxTokens + ' tokens，shouldCompact=' + (surfMB >= 2.4));
-      return {
-        ok: true, mode, targetId: targetId,
-        events: out.length, turns: newTurn - startTurn, stats,
-        progress: {
-          written: takenTurns,
-          total: totalTurns,
-          nextSkip,
-          remaining,
-          nextArgs: remaining > 0 ? { skip: nextSkip, limit: Number(args.limit) || 120 } : null,
-        },
-        surface: { mb: surfMB, approxTokens, shouldCompact: surfMB >= 2.4 },
-        hint: remaining > 0
-          ? (surfMB >= 2.4
-            ? '本次写入 ' + surfMB + 'MB（约 ' + approxTokens + ' tokens），已到该压缩的线：先在 GUI 里 /compact，再按 nextArgs 继续。'
-            : '还有 ' + remaining + ' 个 turn 未写。可直接按 nextArgs 继续，也可以先压缩。')
-          : '全部写完了，最后压一次收尾。',
-      };
+      // 没有匹配到任何模式
+      return { ok: false, error: '未指定模式：inspect / verify / forkClone / fullCopy / mixCopy / foldTarget / fromJsonl / copySequential / resumeOnly 之一' };
     },
   }), 'dsh-session-merge: merge tool');
 
@@ -1391,6 +1214,25 @@ export function apply(ctx) {
         while (p && p !== Object.prototype) { for (const n of Object.getOwnPropertyNames(p)) names.add(n); p = Object.getPrototypeOf(p); }
         out.members = [...names];
       } catch (err) { out.membersErr = String(err?.message ?? err); }
+
+      // 句柄表探测：不同实现对在打开的会话维护一个 Map/Set，找到就能报"谁占着"
+      const handleTables = ['handles', '_handles', 'openHandles', 'writers', '_writers', 'locks', '_locks', 'sessions'];
+      for (const k of handleTables) {
+        let v;
+        try { v = persistence[k]; } catch { continue; }
+        if (!v) continue;
+        try {
+          if (v instanceof Map) {
+            out['table_' + k] = { type: 'Map', size: v.size, keys: [...v.keys()].slice(0, 20).map(String), holdsTarget: v.has(targetId) };
+          } else if (v instanceof Set) {
+            out['table_' + k] = { type: 'Set', size: v.size, holdsTarget: v.has(targetId) };
+          } else if (typeof v === 'object') {
+            const keys = Object.keys(v);
+            out['table_' + k] = { type: 'object', size: keys.length, hasTarget: Object.prototype.hasOwnProperty.call(v, targetId), keys: keys.slice(0, 20) };
+          }
+        } catch (err) { out['table_' + k] = { err: String(err?.message ?? err) }; }
+      }
+
       if (args.action === 'release') {
         for (const m of ['close', 'release', 'evict', 'dispose', 'unlock', 'closeSession', 'releaseSession', 'forceRelease']) {
           if (typeof persistence[m] === 'function') {

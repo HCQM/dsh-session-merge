@@ -13,10 +13,13 @@ const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
 const noReplay = args.includes('--no-replay');
 const strictReplay = args.includes('--strict-replay');
+const allMode = args.includes('--all');
+const clearAll = args.includes('--clear-all');
 const target = args.find((a) => !a.startsWith('--'));
 
-if (!target) {
+if (!target && !allMode) {
   console.error('用法: node bin/validate.mjs <会话id前缀|会话目录|文件> [--json] [--no-replay] [--strict-replay]');
+  console.error('      node bin/validate.mjs --all [--json]      校验全部会话（除退出码外不额外写入）');
   process.exit(2);
 }
 
@@ -43,6 +46,39 @@ function resolveTarget(a) {
     }
   }
   return null;
+}
+
+// ---- 批量模式 ----
+if (allMode) {
+  if (!fs.existsSync(ROOT)) { console.error('会话根目录不存在:', ROOT); process.exit(2); }
+  const targets = [];
+  for (const ws of fs.readdirSync(ROOT, { withFileTypes: true })) {
+    if (!ws.isDirectory()) continue;
+    for (const d of fs.readdirSync(path.join(ROOT, ws.name), { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      const f = pickLogFile(path.join(ROOT, ws.name, d.name));
+      if (f) targets.push(f);
+    }
+  }
+  const results = [];
+  for (const f of targets) {
+    try {
+      results.push(await validateSessionFile(f, { replay: !noReplay, strictReplay }));
+    } catch (e) {
+      results.push({ ok: false, file: path.basename(f), session: path.basename(path.dirname(f)), problems: ['校验抛错: ' + e.message] });
+    }
+  }
+  const bad = results.filter((r) => !r.ok);
+  if (jsonOut) {
+    console.log(JSON.stringify({ total: results.length, failed: bad.length, results }, null, 2));
+  } else {
+    console.log(`共 ${results.length} 个会话，通过 ${results.length - bad.length}，不通过 ${bad.length}`);
+    for (const r of bad) {
+      console.log(`  ❌ ${r.session}  ${r.file ?? ''}`);
+      for (const p of (r.problems || []).slice(0, 3)) console.log('      • ' + p);
+    }
+  }
+  process.exit(bad.length ? 1 : 0);
 }
 
 const file = resolveTarget(target);
