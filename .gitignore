@@ -1,0 +1,4 @@
+debug.log
+debug.jsonl
+node_modules/
+*.log
